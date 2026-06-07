@@ -1,0 +1,37 @@
+[
+  {
+    "id": "chunk_001",
+    "content": "Employee salary for Q1 and payroll planning.",
+    "source_document": "Salary_2025.pdf",
+    "document_groups": [
+      "HR Team",
+      "Finance Leadership"
+    ],
+    "tags": [
+      "salary",
+      "payroll"
+    ],
+    "roles": [
+      "HR_MANAGER",
+      "CFO"
+    ],
+    "processed": true
+  },
+  {
+    "id": "chunk_002",
+    "content": "Company recruitment strategy for Q2.",
+    "source_document": "HR_Strategy.docx",
+    "document_groups": [
+      "HR Team"
+    ],
+    "tags": [
+      "company",
+      "recruitment"
+    ],
+    "roles": [
+      "HR_MANAGER",
+      "HR_STAFF"
+    ],
+    "processed": true
+  }
+]
