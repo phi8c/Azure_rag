@@ -34,7 +34,7 @@ class PermissionRepository:
     async def get_role_access(
 
         db:
-        AsyncSession,
+        AsyncSession,   
 
         role_name:
         str
@@ -140,6 +140,8 @@ class PermissionRepository:
 
 
         permissions = result.all()
+        
+        print(" in ra permission trong hàm", permissions)
 
 
         return [

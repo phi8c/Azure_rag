@@ -57,6 +57,10 @@ from app.services.session_memory.conversation_summary_service import (
     ConversationSummaryService
 )
 
+from app.services.rewrite_service.query_rewrite_service import (
+    QueryRewriteService
+)
+
 
 router = APIRouter(
 
@@ -112,14 +116,38 @@ async def query(
   )
 
  )
+#  retrieval_query = await (
+#      SessionMemoryService
+#      .build_retrieval_query(
+#          db=db,
+#          conversation_id=body.conversation_id,
+#          question = body.question
+#      )
+#  )
+
+
+
+ history = await (
+        SessionMemoryService
+        .build_context(
+            db=db,
+            conversation_id=body.conversation_id
+        )
+    )
  retrieval_query = await (
-     SessionMemoryService
-     .build_retrieval_query(
-         db=db,
-         conversation_id=body.conversation_id,
-         question = body.question
-     )
- )
+    QueryRewriteService
+    .rewrite(
+        history=history,
+        question=body.question
+    )
+)
+ print(
+    "rewritten query =",
+    retrieval_query
+)
+ 
+#  print("in ra retrieval", retrieval_query)
+ print("in ra permission", permissions)
 
 
  chunks = (
@@ -130,7 +158,7 @@ async def query(
 
    question=
 
-   retrieval_query,
+   body.question,
 
    permissions=
 
@@ -139,6 +167,7 @@ async def query(
   )
 
  )
+ print(" in ra", chunks)
 
 
  # =======

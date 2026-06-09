@@ -17,19 +17,24 @@ class SessionMemoryService:
             .get_recent_message(
                 db=db,
                 conversation_id= conversation_id,
-                limit=20
+                limit=3
             )
             
         )
         formatted_messages = []
+
         for message in recent_messages:
+
+            if message.role != "user":
+                continue
+
             formatted_messages.append(
-                f"{message.role}: {message.content}"
+                message.content
             )
-        return "/n".join(
-                
+
+        return "\n".join(
             formatted_messages
-         )
+        )
         
     @staticmethod
     async def build_retrieval_query (

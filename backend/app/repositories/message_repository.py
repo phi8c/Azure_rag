@@ -61,7 +61,8 @@ class MessageRepository:
                 Message
             )
             .where(
-                Message.conversation_id == conversation_id
+                Message.conversation_id == conversation_id,
+                Message.role == "user"
                 
                 
             )

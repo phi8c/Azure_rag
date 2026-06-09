@@ -74,7 +74,7 @@ class RagService:
 
 Bạn là trợ lý nội bộ doanh nghiệp.
 
-Bạn là trợ lý nội bộ doanh nghiệp. Hãy trả lời câu hỏi dựa trên bộ ngữ cảnh (Context) được cung cấp. Dựa theo bối cảnh trước đó mà người dùng đã hỏi (recent_message)
+Bạn là trợ lý nội bộ doanh nghiệp. Hãy trả lời câu hỏi dựa trên bộ ngữ cảnh (Context) được cung cấp. 
 
 
 
@@ -87,7 +87,7 @@ Yêu cầu nghiêm ngặt:
 RECENT CONVERSATION
 ------------------
 
-{recent_messages}
+
 
 
 
@@ -103,7 +103,7 @@ Question:
 
 """
 
-
+        print("in ra", prompt)
         answer = await (
 
             self.llm

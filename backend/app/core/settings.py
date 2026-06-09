@@ -30,6 +30,10 @@ class Settings(BaseSettings):
 
     AZURE_SEARCH_KEY: str | None = None
     
+    GEMINI_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
+    
     
     OLLAMA_MODEL: str = "gemma3:1b"
 

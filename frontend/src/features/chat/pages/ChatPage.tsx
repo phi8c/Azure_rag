@@ -67,7 +67,7 @@ useChatStore(
 
   const {
     mutateAsync,
-    isPending
+   
   } = useSendMessage();
 
   useEffect(() => {
