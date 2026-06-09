@@ -132,5 +132,40 @@ class ConversationRepository:
 
 
         return True
+    
+    @staticmethod
+    async def get_or_create_by_email(
+        db: AsyncSession,
+        email: str
+    ):
 
-            
+        query = await db.execute(
+            select(
+                Conversation
+            )
+            .where(
+                Conversation.user_email == email
+            )
+            .order_by(
+                Conversation.created_at.asc()
+            )
+        )
+
+        item = query.scalar_one_or_none()
+
+        if item:
+            return item
+
+        item = Conversation(
+            user_email=email
+        )
+
+        db.add(item)
+
+        await db.commit()
+
+        await db.refresh(item)
+
+        return item
+
+                

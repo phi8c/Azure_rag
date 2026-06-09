@@ -46,3 +46,15 @@ class ConversationService:
         return await (
             ConversationRepository.rename(db, id, title)
         )
+    @staticmethod
+    async def get_or_create_by_email(
+        db,
+        email
+    ):
+        return await (
+            ConversationRepository
+            .get_or_create_by_email(
+                db,
+                email
+            )
+        )

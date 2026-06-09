@@ -29,4 +29,17 @@ class RoleRepository:
             select(Role)
         )
         return result.scalars().all()
+    @staticmethod
+    async def get_role_names(
+        db: AsyncSession
+    ) -> list[str]:
+
+        result = await db.execute(
+            select(Role.name)
+        )
+
+        return [
+            row[0]
+            for row in result.all()
+        ]
         

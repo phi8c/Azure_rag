@@ -4,6 +4,8 @@ from pydantic_settings import (
 )
 
 
+
+
 class Settings(BaseSettings):
 
     DATABASE_URL: str | None = None
@@ -23,6 +25,10 @@ class Settings(BaseSettings):
 
 
     # ===== thêm =====
+    
+    AZURE_TENANT_ID: str = ""
+    AZURE_CLIENT_ID: str = ""
+    AZURE_CLIENT_SECRET: str = ""
 
     AZURE_SEARCH_ENDPOINT: str | None = None
 
@@ -33,6 +39,9 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
+    
+    BOT_APP_ID: str = ""
+    BOT_APP_SECRET: str = ""
     
     
     OLLAMA_MODEL: str = "gemma3:1b"
