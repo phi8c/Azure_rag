@@ -1,0 +1,441 @@
+from fastapi import (
+    APIRouter,
+    UploadFile,
+    File,
+    Form,
+    HTTPException,
+    Depends,
+    Request
+)
+import asyncio
+
+
+from app.services.sharepoint.sharepoint_service import (
+    SharePointService
+)
+from sqlalchemy.ext.asyncio import (
+    AsyncSession
+)
+from app.core.database import (
+    get_db
+)
+
+from app.core.settings import (
+    settings
+)
+
+from app.services.sync_jobs.sync_state import (
+     SyncState
+)
+
+import httpx
+
+
+from app.services.sharepoint.sharepoint_service import (
+    SharePointService
+)
+
+from app.repositories.chunk_repository import (
+    ChunkRepository
+)
+
+from app.services.ingestion.chunk_processor import (
+    ChunkProcessor
+)
+
+from app.repositories.azure_chunk_repository import (
+    AzureChunkRepository
+)
+
+import json
+
+router = APIRouter(
+    prefix="/documents",
+    tags=["Documents"]
+)
+
+
+ROLE_MAPPING = {
+
+    "CEO":
+    "CEO",
+
+    "HR_MANAGER":
+    "Trưởng Phòng",
+
+    "IT_MANAGER":
+    "Trưởng Phòng",
+
+    "SALE_MANAGER":
+    "Trưởng Phòng",
+
+    "HR_STAFF":
+    "Chuyên viên",
+
+    "IT_STAFF":
+    "Chuyên viên",
+
+    "SALE_STAFF":
+    "Chuyên viên"
+
+}
+
+
+@router.post("/upload")
+async def upload_document(
+
+    file: UploadFile =
+    File(...),
+
+    email: str =
+    Form(...),
+
+    role: str =
+    Form(...),
+
+    security_level: str =
+    Form(...),
+
+    document_type: str =
+    Form(...)
+
+):
+
+    print(
+        "email =",
+        email
+    )
+
+    print(
+        "role =",
+        role
+    )
+
+    print(
+        "security_level =",
+        security_level
+    )
+
+    print(
+        "document_type =",
+        document_type
+    )
+
+    print(
+        "file_name =",
+        file.filename
+    )
+
+    department = (
+        role
+        .split("_")[0]
+    )
+
+    owner_role = (
+        ROLE_MAPPING.get(
+            role,
+            "Chuyên viên"
+        )
+    )
+
+    print(
+        "department =",
+        department
+    )
+
+    print(
+        "owner_role =",
+        owner_role
+    )
+
+    file_content = await (
+        file.read()
+    )
+
+    upload_result = await (
+        SharePointService
+        .upload_file(
+            department=
+            department,
+
+            file_name=
+            file.filename,
+
+            file_content=
+            file_content
+        )
+    )
+    
+    print("in ra upload result", upload_result)
+
+    if "id" not in upload_result:
+
+        raise HTTPException(
+            status_code=500,
+            detail=upload_result
+        )
+
+    drive_item_id = (
+        upload_result["id"]
+    )
+
+    list_item_id = await (
+        SharePointService
+        .get_list_item_id(
+            drive_item_id
+        )
+    )
+
+    print(
+        "list_item_id =",
+        list_item_id
+    )
+
+    print(
+        "item_id =",
+        list_item_id
+    )
+
+    metadata_result = await (
+        SharePointService
+        .update_metadata(
+
+            item_id=
+            list_item_id,
+
+            department=
+            department,
+
+            owner_role=
+            owner_role,
+
+            security_level=
+            security_level,
+
+            document_type=
+            document_type
+
+        )
+    )
+
+    return {
+
+        "status":
+        "success",
+
+        "email":
+        email,
+
+        "role":
+        role,
+
+        "department":
+        department,
+
+        "owner_role":
+        owner_role,
+
+        "item_id":
+        list_item_id,
+
+        "upload_result":
+        upload_result,
+
+        "metadata_result":
+        metadata_result
+
+    }
+    
+@router.post("/sync")
+async def sync_documents():
+    
+    
+    
+    SyncState.status = (
+        "RUNNING"
+    )
+
+
+    async with httpx.AsyncClient(
+        timeout=300
+    ) as client:
+
+        response = await client.post(
+            settings.LOGIC_APP_URL,
+            json={}
+        )
+
+        print(
+            "logic_status =",
+            response.status_code
+        )
+
+        print(
+            "logic_body =",
+            response.text
+        )
+
+    return {
+
+        "status":
+        "success",
+
+        "logic_status":
+        response.status_code
+
+    }
+    
+@router.get(
+    "/sync-status"
+)
+async def sync_status():
+
+    return {
+
+        "status":
+        SyncState.status
+
+    }
+    
+    
+@router.post(
+    "/sync-completed"
+)
+async def sync_completed(
+    
+    request: Request,
+
+    db: AsyncSession =
+    Depends(get_db)
+
+):
+
+    print(
+        "INGEST COMPLETED"
+    )
+    
+    
+    body = await request.json()
+
+    parent_id = body.get(
+        "parent_id"
+    )
+
+    asyncio.create_task(
+
+        run_post_ingestion_pipeline(
+            db, 
+            parent_id
+        )
+
+    )
+
+    return {
+
+        "status":
+        "accepted"
+
+    }
+    
+    
+    
+async def run_post_ingestion_pipeline(
+    db: AsyncSession,
+    parent_id: str
+):
+
+    open(
+        "review_chunks.json",
+        "w",
+        encoding="utf-8"
+    ).close()
+
+    chunks = (
+
+        ChunkRepository
+        .get_unprocessed_chunks(parent_id)
+
+    )
+
+    for chunk in chunks:
+
+        await (
+
+            ChunkProcessor
+            .process_chunk(
+
+                db=db,
+
+                chunk=chunk
+
+            )
+
+        )
+
+    updated = 0
+
+    with open(
+        "review_chunks.json",
+        encoding="utf-8"
+    ) as f:
+
+        for line in f:
+
+            row = json.loads(
+                line
+            )
+            
+            try:
+
+                sensitivity = int(
+                    row["sensitivity"]
+                )
+
+                if sensitivity not in [
+                    1,
+                    2,
+                    3
+                ]:
+
+                    sensitivity = 2
+
+            except:
+
+                sensitivity = 2
+
+            try:
+
+                AzureChunkRepository\
+                .update_sensitivity(
+
+                    chunk_id=
+                    row["id"],
+
+                    sensitivity=sensitivity
+                    
+
+                )
+
+                updated += 1
+
+            except Exception as e:
+
+                print(
+                    "push sensitivity error =",
+                    e
+                )
+    open(
+    "review_chunks.json",
+    "w",
+    encoding="utf-8"
+    
+).close()
+    SyncState.status = (
+    "COMPLETED"
+)
+    
+
+    print(
+        "updated chunks =",
+        updated
+    )

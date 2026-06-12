@@ -45,6 +45,7 @@ class AzureSearchService:
             )
 
         )
+        print("in ra question trong retrieval", question)
 
         filters = []
 
@@ -151,7 +152,7 @@ class AzureSearchService:
             azure_filter,
 
             top=
-            5
+            20
 
         )
 

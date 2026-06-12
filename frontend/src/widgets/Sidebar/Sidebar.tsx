@@ -12,6 +12,9 @@ import { useCreateConversation } from "@/features/chat/hooks/useCreateConversati
 import { useChatStore } from "@/features/chat/store/chat.store";
 import { useMsal } from "@azure/msal-react";
 
+import LibraryModal
+from "@/features/documents/components/LibraryModal";
+
 export default function Sidebar() {
   const [open, setOpen] = useState(true);
   //const email = "abc@gmail.com";
@@ -25,6 +28,9 @@ export default function Sidebar() {
   account?.username ?? "";
 
   useConversation(email);
+
+  const [showLibrary, setShowLibrary] =
+  useState(false);
 
   const conversations = useChatStore(s => s.conversations);
   const activeId = useChatStore(s => s.currentConversationId);
@@ -41,6 +47,7 @@ export default function Sidebar() {
   }
 
   return (
+    <>
     <aside
       style={{
         display: "flex",
@@ -151,11 +158,14 @@ export default function Sidebar() {
             fontSize: "14px",
             textAlign: "left"
           }}
+          onClick={() =>
+            setShowLibrary(true)
+          }
           onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#e1e5ea")}
           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
         >
-          <BookOpen size={20} style={{ minWidth: "20px" }} />
-          {open && <span>Thư viện</span>}
+           <BookOpen size={20} />
+  {open && <span>Thư viện</span>}
         </button>
       </div>
 
@@ -254,5 +264,19 @@ export default function Sidebar() {
         </button>
       </div>
     </aside>
-  );
+     {
+      showLibrary && (
+
+        <LibraryModal
+
+          onClose={() =>
+            setShowLibrary(false)
+          }
+
+        />
+
+      )
+    }
+    </>
+  );  
 }

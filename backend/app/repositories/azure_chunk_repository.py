@@ -15,7 +15,7 @@ from app.core.settings import settings
 class AzureChunkRepository:
 
     @staticmethod
-    def load_chunks():
+    def load_chunks(parent_id: str):
 
         client = SearchClient(
             endpoint=settings.AZURE_SEARCH_ENDPOINT,
@@ -31,6 +31,8 @@ class AzureChunkRepository:
 
         results = client.search(
             search_text="*",
+            filter=
+            f"parent_id eq '{parent_id}'",
             top=1000
         )
 

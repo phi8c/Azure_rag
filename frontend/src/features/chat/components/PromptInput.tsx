@@ -146,7 +146,7 @@ export default function PromptInput({ value, onChange, onSubmit }: Props) {
             letterSpacing: "0.1px"
           }}
         >
-          Gemini có thể đưa ra thông tin không chính xác, kể cả về con người, vì vậy hãy xác minh các câu trả lời.
+          Assistant RAG có thể đưa ra thông tin không chính xác, kể cả về con người, vì vậy hãy xác minh các câu trả lời.
         </p>
       </div>
     </div>

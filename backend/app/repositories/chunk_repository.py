@@ -66,12 +66,12 @@ class ChunkRepository:
 
 
     @staticmethod
-    def get_unprocessed_chunks():
+    def get_unprocessed_chunks(parent_id: str):
 
         chunks = (
 
             AzureChunkRepository
-            .load_chunks()
+            .load_chunks(parent_id)
 
         )
 

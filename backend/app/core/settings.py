@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     
     
     OLLAMA_MODEL: str = "gemma3:1b"
+    
+    SHAREPOINT_SITE_ID: str = ""
+    SHAREPOINT_DRIVE_ID: str =""
+    
+    LOGIC_APP_URL: str 
 
 
     model_config = SettingsConfigDict(

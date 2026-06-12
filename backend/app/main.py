@@ -28,6 +28,10 @@ from app.api.v1.bot_router import (
 from app.api.v1.conversation_router import (
     router as conversation
 )
+from app.api.v1.document_router import (
+    router as document_router
+)
+
 from fastapi.middleware.cors import (
 
     CORSMiddleware
@@ -98,3 +102,4 @@ app.include_router(chat_router)
 app.include_router(permission_router)
 app.include_router(bot_router)
 app.include_router(conversation)
+app.include_router(document_router)

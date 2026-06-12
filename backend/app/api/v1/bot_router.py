@@ -337,7 +337,7 @@ async def teams_message(
     chunks = (
         AzureSearchService
         .retrieve(
-            question=retrieval_query,
+            question=question,
             permissions=permissions
         )
     )
