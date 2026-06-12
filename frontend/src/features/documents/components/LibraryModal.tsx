@@ -64,7 +64,44 @@ export default function LibraryModal({ onClose }: Props) {
       );
 
       const data = await response.json();
-      setRole(data.value?.[0]?.displayName ?? "");
+
+const validRoles = [
+
+  "CEO",
+
+  "HR_MANAGER",
+  "HR_STAFF",
+
+  "IT_MANAGER",
+  "IT_STAFF",
+
+  "SALE_MANAGER",
+  "SALE_STAFF",
+
+];
+
+const matchedRole =
+
+  data.value
+    ?.map(
+      (group: any) =>
+      group.displayName
+    )
+    .find(
+      (name: string) =>
+      validRoles.includes(
+        name
+      )
+    );
+
+setRole(
+  matchedRole ?? ""
+);
+
+console.log(
+  "groups =",
+  data.value
+);
     };
 
     run();
