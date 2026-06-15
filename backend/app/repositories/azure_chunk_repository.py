@@ -140,3 +140,49 @@ class AzureChunkRepository:
     #     print(
     #     result
     # )
+    
+    @staticmethod
+    def load_chunks_by_title(title: str):
+
+        client = SearchClient(
+            endpoint=settings.AZURE_SEARCH_ENDPOINT,
+            index_name=settings.AZURE_SEARCH_INDEX,
+            credential=AzureKeyCredential(
+                settings.AZURE_SEARCH_KEY
+            )
+        )
+
+        results = client.search(
+            search_text="*",
+            filter=f"title eq '{title}'",
+            top=1000
+        )
+
+        results = list(results)
+
+        if not results:
+            return None
+
+        first_doc = results[0]
+
+        return {
+            "title": title,
+
+            "metadata": {
+                k: v
+                for k, v in first_doc.items()
+                if k not in [
+                    "chunk",
+                    "chunk_id",
+                    "text_vector"
+                ]
+            },
+
+            "chunks": [
+                {
+                    "chunk_id": doc["chunk_id"],
+                    "content": doc["chunk"]
+                }
+                for doc in results
+            ]
+        }
