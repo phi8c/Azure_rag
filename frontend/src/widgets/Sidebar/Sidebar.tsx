@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   Menu,
-  Search,
+  Network,
   BookOpen,
   Plus,
   Settings
@@ -11,6 +11,9 @@ import { useConversation } from "@/features/chat/hooks/useConversation";
 import { useCreateConversation } from "@/features/chat/hooks/useCreateConversation";
 import { useChatStore } from "@/features/chat/store/chat.store";
 import { useMsal } from "@azure/msal-react";
+
+import GraphModal
+from "@/features/graph/components/GraphModal";
 
 import LibraryModal
 from "@/features/documents/components/LibraryModal";
@@ -31,6 +34,9 @@ export default function Sidebar() {
 
   const [showLibrary, setShowLibrary] =
   useState(false);
+
+  const [showGraph, setShowGraph] =
+useState(false);
 
   const conversations = useChatStore(s => s.conversations);
   const activeId = useChatStore(s => s.currentConversationId);
@@ -118,28 +124,31 @@ export default function Sidebar() {
 
       <div style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "4px" }}>
         <button
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: open ? "flex-start" : "center",
-            gap: "12px",
-            borderRadius: "100px",
-            color: "#1f1f1f",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            width: "100%",
-            height: "40px",
-            padding: open ? "0 16px" : "0",
-            fontSize: "14px",
-            textAlign: "left"
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#e1e5ea")}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-        >
-          <Search size={20} style={{ minWidth: "20px" }} />
-          {open && <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Tìm kiếm trong các cuộc trò chuyện</span>}
-        </button>
+  onClick={() => setShowGraph(true)}
+  style={{
+    display: "flex",
+    alignItems: "center",
+    justifyContent: open ? "flex-start" : "center",
+    gap: "12px",
+    borderRadius: "100px",
+    color: "#1f1f1f",
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    width: "100%",
+    height: "40px",
+    padding: open ? "0 16px" : "0",
+    fontSize: "14px",
+    textAlign: "left"
+  }}
+>
+  <Network size={20} />
+  {open && (
+    <span>
+      Graph Visualize
+    </span>
+  )}
+</button>
 
         <button
           style={{
@@ -276,7 +285,20 @@ export default function Sidebar() {
         />
 
       )
-    }
+      
+    },
+    {
+      showGraph && (
+
+    <GraphModal
+  open={showGraph}
+  onClose={() =>
+    setShowGraph(false)
+  }
+  
+/>
+      )
+}
     </>
   );  
 }

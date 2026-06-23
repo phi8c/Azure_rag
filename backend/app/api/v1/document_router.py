@@ -46,6 +46,17 @@ from app.services.ingestion.chunk_processor import (
 from app.repositories.azure_chunk_repository import (
     AzureChunkRepository
 )
+from app.services.knowledge.graph_builder_service import (
+    GraphBuilderService
+)
+from app.services.knowledge.graph_ingestion_service import (
+    GraphIngestionService
+)
+
+from app.core.database import (
+    get_db,
+    AsyncSessionLocal
+)
 
 import json
 
@@ -305,8 +316,6 @@ async def sync_completed(
     
     request: Request,
 
-    db: AsyncSession =
-    Depends(get_db)
 
 ):
 
@@ -324,7 +333,7 @@ async def sync_completed(
     asyncio.create_task(
 
         run_post_ingestion_pipeline(
-            db, 
+          
             parent_id
         )
 
@@ -340,102 +349,140 @@ async def sync_completed(
     
     
 async def run_post_ingestion_pipeline(
-    db: AsyncSession,
+    
     parent_id: str
 ):
+    
+    async with (
+        AsyncSessionLocal()
+    ) as db:
+    
+    
 
-    open(
-        "review_chunks.json",
-        "w",
-        encoding="utf-8"
-    ).close()
+        open(
+            "review_chunks.json",
+            "w",
+            encoding="utf-8"
+        ).close()
 
-    chunks = (
+        chunks = (
 
-        ChunkRepository
-        .get_unprocessed_chunks(parent_id)
-
-    )
-
-    for chunk in chunks:
-
-        await (
-
-            ChunkProcessor
-            .process_chunk(
-
-                db=db,
-
-                chunk=chunk
-
-            )
+            ChunkRepository
+            .get_unprocessed_chunks(parent_id)
 
         )
+        title = chunks[0]["title"]
 
-    updated = 0
+        for chunk in chunks:
 
-    with open(
-        "review_chunks.json",
-        encoding="utf-8"
-    ) as f:
+            await (
 
-        for line in f:
+                ChunkProcessor
+                .process_chunk(
 
-            row = json.loads(
-                line
-            )
-            
-            try:
+                    db=db,
 
-                sensitivity = int(
-                    row["sensitivity"]
+                    chunk=chunk
+
                 )
 
-                if sensitivity not in [
-                    1,
-                    2,
-                    3
-                ]:
+            )
+
+        updated = 0
+
+        with open(
+            "review_chunks.json",
+            encoding="utf-8"
+        ) as f:
+
+            for line in f:
+
+                row = json.loads(
+                    line
+                )
+                
+                try:
+
+                    sensitivity = int(
+                        row["sensitivity"]
+                    )
+
+                    if sensitivity not in [
+                        1,
+                        2,
+                        3
+                    ]:
+
+                        sensitivity = 2
+
+                except:
 
                     sensitivity = 2
 
-            except:
+                try:
 
-                sensitivity = 2
+                    AzureChunkRepository\
+                    .update_sensitivity(
+
+                        chunk_id=
+                        row["id"],
+
+                        sensitivity=sensitivity
+                        
+
+                    )
+
+                    updated += 1
+
+                except Exception as e:
+
+                    print(
+                        "push sensitivity error =",
+                        e
+                    )
+        open(
+        "review_chunks.json",
+        "w",
+        encoding="utf-8"
+        
+    ).close()
+        
+        if title:
+
+            print(
+                f"START GRAPH BUILD: {title}"
+            )
 
             try:
 
-                AzureChunkRepository\
-                .update_sensitivity(
+                await (
+                    GraphIngestionService
+                    .ingest_document(
 
-                    chunk_id=
-                    row["id"],
+                        db=db,
 
-                    sensitivity=sensitivity
-                    
-
+                        title=title
+                    )
                 )
 
-                updated += 1
+                print(
+                    f"GRAPH BUILD SUCCESS: {title}"
+                )
 
             except Exception as e:
 
                 print(
-                    "push sensitivity error =",
-                    e
+                    f"GRAPH BUILD ERROR: {e}"
                 )
-    open(
-    "review_chunks.json",
-    "w",
-    encoding="utf-8"
-    
-).close()
-    SyncState.status = (
-    "COMPLETED"
-)
-    
-
-    print(
-        "updated chunks =",
-        updated
+            
+        
+        
+        SyncState.status = (
+        "COMPLETED"
     )
+        
+
+        print(
+            "updated chunks =",
+            updated
+        )

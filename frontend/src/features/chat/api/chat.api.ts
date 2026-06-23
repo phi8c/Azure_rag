@@ -26,6 +26,8 @@ export interface ChatResponse {
 
   email:string;
 
+  use_graph?: boolean;
+
 }
 
 

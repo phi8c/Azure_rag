@@ -5,6 +5,12 @@ from app.models.entity_relationship import (
     EntityRelationship
 )
 
+from sqlalchemy import (
+    select
+)
+
+
+
 
 class EntityRelationshipRepository:
 
@@ -13,9 +19,9 @@ class EntityRelationshipRepository:
 
         db: AsyncSession,
 
-        source_entity_id: int,
+        source_entity_id,
 
-        target_entity_id: int
+        target_entity_id
 
     ):
 
@@ -46,9 +52,15 @@ class EntityRelationshipRepository:
 
         db: AsyncSession,
 
-        source_entity_id: int,
+        source_entity_id,
 
-        target_entity_id: int,
+        target_entity_id,
+
+        chunk_id,
+
+        description,
+
+        embedding=None,
 
         weight: float = 1.0
 
@@ -62,10 +74,22 @@ class EntityRelationshipRepository:
             target_entity_id=
             target_entity_id,
 
-            weight=weight
+            chunk_id=
+            chunk_id,
+
+            description=
+            description,
+
+            embedding=
+            embedding,
+
+            weight=
+            weight
         )
 
-        db.add(relation)
+        db.add(
+            relation
+        )
 
         await db.flush()
 
@@ -76,29 +100,97 @@ class EntityRelationshipRepository:
 
         db: AsyncSession,
 
-        source_entity_id: int,
+        source_entity_id,
 
-        target_entity_id: int
+        target_entity_id,
+
+        chunk_id,
+
+        description,
+
+        embedding=None,
+
+        weight: float = 1.0
 
     ):
 
         relation = await (
             EntityRelationshipRepository
             .exists(
+
                 db,
+
                 source_entity_id,
+
                 target_entity_id
             )
         )
 
         if relation:
+
             return relation
 
         return await (
+
             EntityRelationshipRepository
             .create(
-                db,
+
+                db=db,
+
+                source_entity_id=
                 source_entity_id,
-                target_entity_id
+
+                target_entity_id=
+                target_entity_id,
+
+                chunk_id=
+                chunk_id,
+
+                description=
+                description,
+
+                embedding=
+                embedding,
+
+                weight=
+                weight
             )
         )
+    @staticmethod
+    async def search_similar(
+
+        db: AsyncSession,
+
+        embedding: list[float],
+
+        top_k: int = 10
+
+    ):
+
+        result = await db.execute(
+
+            select(
+                EntityRelationship
+            )
+
+            .order_by(
+
+                EntityRelationship
+                .embedding
+                .cosine_distance(
+                    embedding
+                )
+            )
+
+            .limit(
+                top_k
+            )
+        )
+
+        return (
+
+            result
+            .scalars()
+            .all()
+        )
+        

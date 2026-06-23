@@ -81,7 +81,9 @@ class SensitivityClassifier:
 
         llm = (
             LLMFactory
-            .get_llm()
+            .create_openai(
+                  model="gpt-4.1-mini"
+            )
         )
 
 

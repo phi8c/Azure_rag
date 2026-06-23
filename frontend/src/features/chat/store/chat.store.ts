@@ -2,163 +2,168 @@ import { create }
 from "zustand";
 
 import type {
- Message
+  Message
 }
 from "../types/message";
 
 import type {
- Conversation
+  Conversation
 }
 from "../types/conversation";
 
 
 type ChatState = {
 
- messages:
- Message[];
+  messages:
+  Message[];
 
- conversations:
- Conversation[];
+  conversations:
+  Conversation[];
 
- currentConversationId:
- string | null;
+  currentConversationId:
+  string | null;
 
+  useGraph:
+  boolean;
 
+  setMessages:
+  (
+    messages: Message[]
+  ) => void;
 
- 
+  addMessage:
+  (
+    message: Message
+  ) => void;
 
+  setConversations:
+  (
+    conversations:
+    Conversation[]
+  ) => void;
 
- setMessages:
- (
-   messages:Message[]
- )=>void;
+  setCurrentConversation:
+  (
+    id: string
+  ) => void;
 
+  setUseGraph:
+  (
+    value: boolean
+  ) => void;
 
- addMessage:
- (
-   message:Message
- )=>void;
-
-
- setConversations:
- (
-   conversations:
-   Conversation[]
- )=>void;
-
-
- setCurrentConversation:
- (
-   id:string
- )=>void;
-
-
- renameConversation:
-(
-  id: string,
-  title: string
-)=>void;
-
+  renameConversation:
+  (
+    id: string,
+    title: string
+  ) => void;
 };
 
 
-
-
-export const useChatStore=
+export const useChatStore =
 
 create<ChatState>(
 
-(set)=>({
+  (set) => ({
 
-messages:[],
+    messages: [],
 
-conversations:[],
+    conversations: [],
 
-currentConversationId:
-null,
+    currentConversationId:
+    null,
 
+    useGraph:
+    false,
 
+    setMessages:
+      (messages) =>
 
+        set({
 
-setMessages:
-(messages)=>
+          messages
 
-set({
+        }),
 
-messages
+    addMessage:
+      (message) =>
 
-}),
+        set(
 
+          (state) => ({
 
-addMessage:
-(message)=>
+            messages: [
 
-set(
+              ...state.messages,
 
-(state)=>({
+              message
 
-messages:[
+            ]
 
-...state.messages,
+          })
 
-message
+        ),
 
-]
+    renameConversation:
+      (
+        id,
+        title
+      ) =>
 
-})
+        set(
 
-),  
+          (state) => ({
 
+            conversations:
 
+              state.conversations.map(
 
+                (conversation) =>
 
-renameConversation: (
-  id: string,
-  title: string
-) =>
+                  conversation.id === id
 
-set(state => ({
+                    ? {
+                        ...conversation,
+                        title
+                      }
 
-  conversations:
+                    : conversation
 
-  state.conversations.map(
+              )
 
-    conversation =>
+          })
 
-    conversation.id === id
+        ),
 
-      ? {
-          ...conversation,
-          title
-        }
+    setConversations:
+      (conversations) =>
 
-      : conversation
+        set({
 
-  )
+          conversations
 
-})),
+        }),
 
+    setCurrentConversation:
+      (id) =>
 
-setConversations:
-(conversations)=>
+        set({
 
-set({
+          currentConversationId:
+          id
 
-conversations
+        }),
 
-}),
+    setUseGraph:
+      (value) =>
 
+        set({
 
-setCurrentConversation:
-(id)=>
+          useGraph:
+          value
 
-set({
+        })
 
-currentConversationId:
-id
+  })
 
-})
-
-})
-
-)
+);

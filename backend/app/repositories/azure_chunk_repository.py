@@ -40,6 +40,9 @@ class AzureChunkRepository:
             {
                 "id":
                     doc["chunk_id"],
+                    
+                "title":
+                    doc["title"],
 
                 "content":
                     doc["chunk"],
@@ -186,3 +189,58 @@ class AzureChunkRepository:
                 for doc in results
             ]
         }
+   
+    @staticmethod
+    def load_chunks_by_ids(
+
+        chunk_ids: list[str]
+
+    ):
+
+        if not chunk_ids:
+
+            return []
+
+        client = SearchClient(
+
+            endpoint=
+            settings.AZURE_SEARCH_ENDPOINT,
+
+            index_name=
+            settings.AZURE_SEARCH_INDEX,
+
+            credential=
+            AzureKeyCredential(
+                settings.AZURE_SEARCH_KEY
+            )
+        )
+
+        filters = " or ".join(
+
+            [
+                f"chunk_id eq '{chunk_id}'"
+                for chunk_id in chunk_ids
+            ]
+        )
+
+        results = client.search(
+
+            search_text="*",
+
+            filter=filters,
+
+            top=len(chunk_ids)
+        )
+
+        return [
+
+            {
+                "chunk_id":
+                doc["chunk_id"],
+
+                "content":
+                doc["chunk"]
+            }
+
+            for doc in results
+        ]

@@ -15,6 +15,19 @@ import { getConversationSummary } from "../api/conversation.api";
 
 import { useMsal } from "@azure/msal-react";
 
+import {
+
+ useQueryClient
+
+}
+
+from "@tanstack/react-query";
+
+import {
+  askGraph
+}
+from "@/features/graph/api/graph.api";
+
 
 import {
   renameConversation
@@ -36,10 +49,18 @@ export default function ChatPage() {
   const [message, setMessage] =
     useState("");
 
+  const queryClient =
+  useQueryClient();
+
   const messages =
     useChatStore(
       s => s.messages
     );
+
+  const useGraph =
+  useChatStore(
+    s => s.useGraph
+  );
 
   const currentConversationId =
     useChatStore(
@@ -183,68 +204,125 @@ useChatStore(
 
   }, []);
 
-  async function handleSubmit() {
+async function handleSubmit() {
 
+  const isFirstMessage =
+    messages.length === 0;
 
-    const isFirstMessage =
-  messages.length === 0;
+  if (!message.trim())
+    return;
 
-    if (
-      !message.trim() ||
-      !currentConversationId
-    )
-      return;
+  const content =
+    message;
 
-    const content =
-      message;
+  setMessage("");
 
-    setMessage("");
+  addMessage({
 
-    addMessage({
+    id:
+      crypto.randomUUID(),
 
-      id:
-        crypto.randomUUID(),
+    role:
+      "user",
 
-      role:
-        "user",
+    content,
+
+    createdAt:
+      new Date()
+        .toISOString()
+
+  });
+
+  //
+  // Graph Mode
+  //
+  if (useGraph) {
+
+     if (!currentConversationId)
+    return;
+
+  
+    await askGraph(
+
+      currentConversationId,
 
       content,
 
-      createdAt:
-        new Date()
-          .toISOString()
+      role,
 
-    });
+      account?.username ?? ""
 
-    await mutateAsync({
-  conversation_id:
-    currentConversationId,
-  question:
-    content,
-  role,
-  email:
-    account?.username ?? ""
-});
+    );
 
-if (isFirstMessage) {
+     await queryClient.invalidateQueries({
 
-  const newTitle =
-    content.length > 50
-      ? content.slice(0, 50) + "..."
-      : content;
+    queryKey: [
 
-  await renameConversation(
-    currentConversationId,
-    newTitle
-  );
+      "messages",
 
-  renameConversationStore(
-    currentConversationId,
-    newTitle
-  );
-}
- 
+      currentConversationId
+
+    ]
+
+  });
+
+    
+
+    return;
   }
+  
+
+  //
+  // Normal Chat Mode
+  //
+  if (!currentConversationId)
+    return;
+
+  await mutateAsync({
+
+    conversation_id:
+      currentConversationId,
+
+    question:
+      content,
+
+    role,
+
+    email:
+      account?.username ?? ""
+
+  });
+
+  if (isFirstMessage) {
+
+    const newTitle =
+
+      content.length > 50
+
+        ? content.slice(
+            0,
+            50
+          ) + "..."
+
+        : content;
+
+    await renameConversation(
+
+      currentConversationId,
+
+      newTitle
+
+    );
+
+    renameConversationStore(
+
+      currentConversationId,
+
+      newTitle
+
+    );
+  }
+}
 
   return (
 

@@ -3,45 +3,104 @@ import json
 from app.services.llm.llm_factory import (
     LLMFactory
 )
-
+from app.utils.json_helper import (
+    JsonHelper
+)
+from app.services.llm.llm_failover_service import (LLMFailoverService)
 
 class EntityExtractor:
 
-    def __init__(self):
-
-        self.llm = (
-            LLMFactory
-            .create()
-        )
+    
 
     async def extract(
         self,
         content: str
-    ) -> list[dict]:
+    ) -> dict:
 
         prompt = f"""
 Phân tích đoạn văn dưới đây.
 
-Trích xuất các entity quan trọng.
+Trích xuất:
+
+1. Các entity quan trọng.
 
 Với mỗi entity trả về:
 
 - name
-- summary
+- type
+- description
 
-summary phải mô tả ngắn gọn vai trò,
-ý nghĩa hoặc chức năng của entity
-trong chính đoạn văn này.
+Trong đó:
 
-Chỉ trả về JSON.
+name:
+Tên entity.
 
-Ví dụ:
+type:
+Một trong các giá trị:
+
+- Person
+- Department
+- System
+- Technology
+- Process
+- Document
+- Policy
+- Other
+
+description:
+Mô tả ngắn gọn vai trò, chức năng hoặc ý nghĩa
+của entity trong chính đoạn văn này.
+
+--------------------------------------------------
+
+2. Các mối quan hệ giữa các entity
+TRONG CHÍNH ĐOẠN VĂN NÀY.
+
+Với mỗi relationship trả về:
+
+- source
+- target
+- description
+
+Trong đó:
+
+source:
+Entity nguồn.
+
+target:
+Entity đích.
+
+description:
+Mô tả ngắn gọn mối quan hệ giữa hai entity.
+
+Chỉ tạo relationship nếu mối quan hệ
+được thể hiện rõ trong đoạn văn.
+
+--------------------------------------------------
+
+Chỉ trả về JSON hợp lệ.
+
+dưới đây là mẫu JSON bạn hãy dựa theo:
 
 {{
   "entities": [
     {{
       "name": "Redis",
-      "summary": "Lưu thông tin phiên làm việc."
+      "type": "Technology",
+      "description": "Lưu thông tin phiên làm việc."
+    }},
+    {{
+      "name": "Authentication",
+      "type": "System",
+      "description": "Sử dụng dữ liệu phiên làm việc để xác thực người dùng."
+    }}
+  ],
+
+  "relationships": [
+    {{
+      "source": "Authentication",
+      "target": "Redis",
+      "description": "Authentication sử dụng dữ liệu phiên làm việc được lưu trong Redis."
     }}
   ]
 }}
@@ -52,21 +111,48 @@ Ví dụ:
 """
 
         response = await (
-            self.llm.generate(
+
+            LLMFailoverService
+            .generate(
                 prompt
             )
+
+        )
+        
+        print(
+        "\n========== RAW RESPONSE ==========\n"
+        )
+
+        #print(response)
+
+        print(
+            "\n==================================\n"
         )
 
         try:
 
-            parsed = json.loads(
+            parsed = (
+            JsonHelper
+            .parse_llm_json(
                 response
             )
+        )  
+            print("in ra response sau parse", parsed)
 
-            return parsed.get(
-                "entities",
-                []
-            )
+            return {
+
+                "entities":
+                parsed.get(
+                    "entities",
+                    []
+                ),
+
+                "relationships":
+                parsed.get(
+                    "relationships",
+                    []
+                )
+            }
 
         except Exception as e:
 
@@ -75,4 +161,9 @@ Ví dụ:
                 e
             )
 
-            return []
+            return {
+
+                "entities": [],
+
+                "relationships": []
+            }

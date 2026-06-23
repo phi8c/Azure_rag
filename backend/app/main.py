@@ -31,6 +31,12 @@ from app.api.v1.conversation_router import (
 from app.api.v1.document_router import (
     router as document_router
 )
+from app.api.v1.graph_router import (
+    router as graph_router
+)
+from app.api.v1.graph_chat_router import (
+    router as graph_chat_router
+)
 
 from fastapi.middleware.cors import (
 
@@ -103,3 +109,5 @@ app.include_router(permission_router)
 app.include_router(bot_router)
 app.include_router(conversation)
 app.include_router(document_router)
+app.include_router(graph_router)
+app.include_router(graph_chat_router)
