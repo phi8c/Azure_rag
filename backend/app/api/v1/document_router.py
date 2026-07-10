@@ -46,8 +46,8 @@ from app.services.ingestion.chunk_processor import (
 from app.repositories.azure_chunk_repository import (
     AzureChunkRepository
 )
-from app.services.knowledge.graph_builder_service import (
-    GraphBuilderService
+from app.services.delta.delta_service import (
+   DeltaService
 )
 from app.services.knowledge.graph_ingestion_service import (
     GraphIngestionService
@@ -486,3 +486,212 @@ async def run_post_ingestion_pipeline(
             "updated chunks =",
             updated
         )
+        
+@router.get("/sites")
+async def get_sites():
+
+    return await (
+        SharePointService
+        .get_sites()
+    )
+    
+@router.get(
+    "/sites/{site_id}/lists"
+)
+async def get_lists(
+    site_id: str,
+):
+    return await (
+        SharePointService
+        .get_lists(site_id)
+    )
+    
+@router.get(
+    "/sites/{site_id}/lists/{list_id}/configuration"
+)
+@staticmethod
+async def get_site_configuration(
+    site_id: str,
+    list_id: str,
+):
+
+    data = await SharePointService.get_rag_configuration(
+        site_id,
+        list_id
+    )
+
+    if not data["value"]:
+        return None
+
+    fields = data["value"][0]["fields"]
+
+    return {
+        "enable_rag": fields.get("EnableRAG", False),
+        "auto_ingest": fields.get("AutoIngest", False),
+        "sync_interval_minutes": fields.get(
+            "SyncIntervalMinutes",
+            5,
+        ),
+        "default_library": fields.get(
+            "DefaultLibrary"
+        ),
+        "default_folder": fields.get(
+            "DefaultFolder"
+        ),
+    }
+
+@router.get("/upload-options")
+async def get_upload_options():
+
+    return await (
+        SharePointService
+        .get_upload_options()
+    )
+    
+@router.post("/upload-sharepoint")
+async def upload_document(
+    file: UploadFile = File(...),
+    email: str = Form(...),
+    role: str = Form(...),
+    site_id: str = Form(...),
+    drive_id: str = Form(...),
+    folder_id: str | None = Form(None),
+    security_level: str = Form(...),
+    document_type: str = Form(...),
+):
+
+    print("email =", email)
+    print("role =", role)
+    print("site_id =", site_id)
+    print("drive_id =", drive_id)
+    print("folder_id =", folder_id)
+    print("security_level =", security_level)
+    print("document_type =", document_type)
+    print("file_name =", file.filename)
+
+    department = role.split("_")[0]
+
+    owner_role = ROLE_MAPPING.get(
+        role,
+        "Chuyên viên",
+    )
+
+    print("department =", department)
+    print("owner_role =", owner_role)
+
+    file_content = await file.read()
+
+    upload_result = await SharePointService.upload_file_sharepoint(
+        site_id=site_id,
+        drive_id=drive_id,
+        folder_id=folder_id,
+        file_name=file.filename,
+        file_content=file_content,
+    )
+
+    print("upload_result =", upload_result)
+
+    if "id" not in upload_result:
+
+        raise HTTPException(
+            status_code=500,
+            detail=upload_result,
+        )
+
+    drive_item_id = upload_result["id"]
+
+    list_item_id = await (
+    SharePointService
+    .get_list_item_id(
+        site_id=site_id,
+        drive_id=drive_id,
+        drive_item_id=drive_item_id,
+    )
+)
+    print("list_item_id =", list_item_id)
+
+    metadata_result = await SharePointService.update_metadata(
+        site_id=site_id,
+        item_id=list_item_id,
+        department=department,
+        owner_role=owner_role,
+        security_level=security_level,
+        document_type=document_type,
+    )
+
+    return {
+        "status": "success",
+        "email": email,
+        "role": role,
+        "site_id": site_id,
+        "drive_id": drive_id,
+        "folder_id": folder_id,
+        "department": department,
+        "owner_role": owner_role,
+        "item_id": list_item_id,
+        "upload_result": upload_result,
+        "metadata_result": metadata_result,
+    }
+
+@router.get("/test-delta")
+async def test_delta():
+
+    upload_options = await (
+        SharePointService
+        .get_upload_options()
+    )
+
+    site = upload_options[0]
+
+    drive = site["libraries"][0]
+
+    return await (
+        SharePointService
+        .get_first_delta(
+            drive_id=drive["id"]
+        )
+    )
+    
+@router.post("/delta/check")
+async def check_delta(
+    db: AsyncSession = Depends(get_db),
+):
+
+    upload_options = await (
+        SharePointService
+        .get_upload_options()
+    )
+
+    changed = False
+    print("in ra upload option", upload_options)
+
+    for site in upload_options:
+
+        print("=" * 80)
+        print("Checking site:", site["name"])
+
+        for drive in site["libraries"]:
+
+            print("Checking drive:", drive["name"])
+
+            result = await (
+            DeltaService
+            .check(
+
+                db=db,
+
+                site_id=site["id"],
+
+                drive_id=drive["id"],
+
+            )
+        )
+
+            print("Changed =", result)
+
+            if result:
+                changed = True
+
+    return {
+        "changed": changed,
+    }

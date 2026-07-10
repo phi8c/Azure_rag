@@ -33,7 +33,7 @@ class OllamaService(BaseLLM):
                 timeout=120
             )
             
-        #print("check prompt", prompt)
+        
 
         data = response.json()
 

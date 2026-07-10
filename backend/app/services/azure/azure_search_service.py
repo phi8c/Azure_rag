@@ -10,7 +10,9 @@ from azure.core.credentials import (
     AzureKeyCredential
 )
 
-from openai import OpenAI
+from openai import (
+    AzureOpenAI
+)
 
 from app.core.settings import settings
 
@@ -45,7 +47,11 @@ class AzureSearchService:
             )
 
         )
-        print("in ra question trong retrieval", question)
+
+        print(
+            "Question:",
+            question
+        )
 
         filters = []
 
@@ -56,13 +62,11 @@ class AzureSearchService:
                 "("
 
                 f"department eq "
-
                 f"'{p['department']}' "
 
                 "and "
 
                 f"sensitivity le "
-
                 f"{p['max_sensitivity']}"
 
                 ")"
@@ -79,14 +83,30 @@ class AzureSearchService:
 
         )
 
+        print(
+            "Azure Filter:",
+            azure_filter
+        )
+
         #
         # EMBEDDING QUERY
         #
+        # Azure OpenAI
+        #
 
-        openai_client = OpenAI(
+        openai_client = AzureOpenAI(
 
             api_key=
-            settings.OPENAI_API_KEY
+            settings
+            .AZURE_OPENAI_API_KEY,
+
+            azure_endpoint=
+            settings
+            .AZURE_OPENAI_ENDPOINT,
+
+            api_version=
+            settings
+            .AZURE_OPENAI_API_VERSION
 
         )
 
@@ -97,7 +117,8 @@ class AzureSearchService:
             .create(
 
                 model=
-                "text-embedding-3-small",
+                settings
+                .AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
 
                 input=
                 question
@@ -112,6 +133,11 @@ class AzureSearchService:
             .data[0]
             .embedding
 
+        )
+
+        print(
+            "Embedding dimension:",
+            len(query_embedding)
         )
 
         #

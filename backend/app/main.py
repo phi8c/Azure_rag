@@ -1,5 +1,11 @@
 from fastapi import FastAPI
 
+import asyncio
+
+from app.workers.sharepoint_delta_worker import (
+    sharepoint_delta_worker,
+)
+
 from app.api.v1.role_router import router as role_router
 from app.api.v1.tag_router import router as tag_router
 
@@ -98,6 +104,14 @@ app.add_middleware(
     allow_headers=["*"]
 
 )
+
+
+
+@app.on_event("startup")
+async def startup():
+    asyncio.create_task(
+        sharepoint_delta_worker()
+    )
 
 app.include_router(role_router)
 app.include_router(tag_router)

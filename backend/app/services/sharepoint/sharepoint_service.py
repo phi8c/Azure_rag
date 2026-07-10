@@ -54,7 +54,9 @@ class SharePointService:
             
     @staticmethod
     async def get_list_item_id(
-        drive_item_id: str
+        site_id: str,
+        drive_id: str,
+        drive_item_id: str,
     ):
 
         access_token = await (
@@ -68,9 +70,9 @@ class SharePointService:
 
                 f"https://graph.microsoft.com/v1.0"
 
-                f"/sites/{settings.SHAREPOINT_SITE_ID}"
+                f"/sites/{site_id}"
 
-                f"/drives/{settings.SHAREPOINT_DRIVE_ID}"
+                f"/drives/{drive_id}"
 
                 f"/items/{drive_item_id}"
 
@@ -102,7 +104,6 @@ class SharePointService:
             data = response.json()
 
             return data.get("id")
-
     @staticmethod
     async def upload_file(
         department: str,
@@ -157,23 +158,25 @@ class SharePointService:
 
     @staticmethod
     async def update_metadata(
-
+        site_id: str,
+       
         item_id: str,
-
         department: str,
-
         owner_role: str,
-
         security_level: str,
-
-        document_type: str
-
+        document_type: str,
     ):
 
         access_token = await (
             SharePointService
             ._get_access_token()
         )
+        
+        document_library = await SharePointService.get_document_library(
+        site_id
+        )
+
+        list_id = document_library["id"]
 
         async with httpx.AsyncClient() as client:
 
@@ -181,9 +184,9 @@ class SharePointService:
 
                 f"https://graph.microsoft.com/v1.0"
 
-                f"/sites/{settings.SHAREPOINT_SITE_ID}"
+                f"/sites/{site_id}"
 
-                f"/lists/{SharePointService.LIST_ID}"
+                f"/lists/{list_id}"
 
                 f"/items/{item_id}"
 
@@ -207,44 +210,444 @@ class SharePointService:
 
             }
 
-            print(
-                "metadata_url =",
-                metadata_url
-            )
-
-            print(
-                "payload =",
-                payload
-            )
+            print("metadata_url =", metadata_url)
+            print("payload =", payload)
 
             response = await client.patch(
 
                 metadata_url,
 
                 headers={
-
                     "Authorization":
                     f"Bearer {access_token}",
 
                     "Content-Type":
                     "application/json"
-
                 },
 
                 json=payload
 
             )
 
+            print("metadata_status =", response.status_code)
+            print("metadata_body =", response.text)
+
+            return response.json()
+    @staticmethod
+    async def _get_headers():
+
+            access_token = await (
+                SharePointService
+                ._get_access_token()
+            )
+
+            return {
+                "Authorization":
+                f"Bearer {access_token}"
+            }
+    @staticmethod
+    async def get_sites():
+
+        headers = await SharePointService._get_headers()
+
+        async with httpx.AsyncClient() as client:
+
+            response = await client.get(
+                "https://graph.microsoft.com/v1.0/sites?search=*",
+                headers=headers,
+            )
+
+            data = response.json()
+
+            return [
+                {
+                    "id": site["id"],
+                    "name": site["displayName"],
+                    "web_url": site["webUrl"],
+                }
+                for site in data.get("value", [])
+            ]
+            
+    @staticmethod
+    async def get_lists(
+        site_id: str,
+    ):
+
+        headers = await (
+            SharePointService
+            ._get_headers()
+        )
+
+        timeout = httpx.Timeout(
+            connect=30.0,
+            read=120.0,
+            write=120.0,
+            pool=120.0,
+        )
+
+        async with httpx.AsyncClient(
+            timeout=timeout,
+        ) as client:
+
+            response = await client.get(
+
+                f"https://graph.microsoft.com/v1.0/sites/{site_id}/lists?$select=id,displayName",
+
+                headers=headers,
+
+            )
+
             print(
-                "metadata_status =",
+                "lists_status =",
+                response.status_code,
+            )
+
+            print(
+                "lists_body =",
+                response.text,
+            )
+
+            return (
+                response.json()
+            )
+            
+    @staticmethod
+    async def get_rag_configuration(
+        site_id: str,
+        list_id: str,
+    ):
+
+        headers = await (
+            SharePointService
+            ._get_headers()
+        )
+
+        async with httpx.AsyncClient() as client:
+
+            response = await client.get(
+
+                f"https://graph.microsoft.com/v1.0"
+                f"/sites/{site_id}"
+                f"/lists/{list_id}"
+                f"/items"
+                f"?expand=fields",
+
+                headers=headers
+
+            )
+
+            print(
+                "config_status =",
                 response.status_code
             )
 
             print(
-                "metadata_body =",
+                response.text
+            )
+
+            return response.json()
+    @staticmethod
+    async def get_drives(
+        site_id: str,
+    ):
+
+        headers = await (
+            SharePointService
+            ._get_headers()
+        )
+
+        async with httpx.AsyncClient() as client:
+
+            response = await client.get(
+
+                f"https://graph.microsoft.com/v1.0"
+                f"/sites/{site_id}"
+                f"/drives",
+
+                headers=headers
+
+            )
+
+            return response.json()
+    @staticmethod
+    async def get_root_folders(
+        drive_id: str,
+    ):
+
+        headers = await SharePointService._get_headers()
+
+        async with httpx.AsyncClient() as client:
+
+            response = await client.get(
+                f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/children",
+                headers=headers,
+            )
+
+            data = response.json()
+
+            return [
+                {
+                    "id": item["id"],
+                    "name": item["name"],
+                }
+                for item in data.get("value", [])
+                if "folder" in item
+            ]
+    @staticmethod
+    async def find_configuration_list(
+        site_id: str,
+    ):
+
+        lists = await SharePointService.get_lists(
+            site_id=site_id,
+        )
+
+        print("=" * 100)
+        print("site_id =", site_id)
+        print("lists =", lists)
+
+        if "value" not in lists:
+            return None
+
+        for item in lists["value"]:
+
+            if item["displayName"] == "RAG Configuration":
+                return item
+
+        return None
+    
+    @staticmethod
+    async def get_upload_options():
+
+        sites = await SharePointService.get_sites()
+
+        result = []
+
+        for site in sites:
+
+            configuration_list = await SharePointService.find_configuration_list(
+                site_id=site["id"],
+            )
+
+            if configuration_list is None:
+                continue
+
+            configuration = await SharePointService.get_rag_configuration(
+                site_id=site["id"],
+                list_id=configuration_list["id"],
+            )
+
+            items = configuration.get("value", [])
+
+            if not items:
+                continue
+
+            fields = items[0]["fields"]
+
+            if not fields.get("EnableRAG", False):
+                continue
+
+            drives = await SharePointService.get_drives(
+                site_id=site["id"],
+            )
+
+            libraries = []
+
+            for drive in drives.get("value", []):
+
+                folders = await SharePointService.get_root_folders(
+                    drive_id=drive["id"],
+                )
+
+                libraries.append(
+                    {
+                        "id": drive["id"],
+                        "name": drive["name"],
+                        "folders": folders,
+                    }
+                )
+
+            result.append(
+                {
+                    "id": site["id"],
+                    "name": site["name"],
+                    "libraries": libraries,
+                }
+            )
+
+        return result
+    
+    @staticmethod
+    async def upload_file_sharepoint(
+        site_id: str,
+        drive_id: str,
+        folder_id: str | None,
+        file_name: str,
+        file_content: bytes,
+    ):
+        access_token = await SharePointService._get_access_token()
+
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/octet-stream",
+        }
+
+        if folder_id:
+
+            upload_url = (
+                f"https://graph.microsoft.com/v1.0"
+                f"/drives/{drive_id}"
+                f"/items/{folder_id}:/{file_name}:/content"
+            )
+
+        else:
+
+            upload_url = (
+                f"https://graph.microsoft.com/v1.0"
+                f"/sites/{site_id}"
+                f"/drives/{drive_id}"
+                f"/root:/{file_name}:/content"
+            )
+
+        print("upload_url =", upload_url)
+
+        async with httpx.AsyncClient() as client:
+
+            response = await client.put(
+                upload_url,
+                headers=headers,
+                content=file_content,
+            )
+
+        print("upload_status =", response.status_code)
+        print("upload_body =", response.text)
+
+        return response.json()
+    
+    @staticmethod
+    async def get_document_library(
+        site_id: str,
+    ):
+        lists = await SharePointService.get_lists(site_id)
+
+        for item in lists["value"]:
+
+            if item["list"]["template"] == "documentLibrary":
+
+                return item
+
+        raise Exception("Document library not found")
+    
+    @staticmethod
+    async def get_delta(
+        delta_link: str,
+    ):
+
+        access_token = await (
+            SharePointService
+            ._get_access_token()
+        )
+
+        async with httpx.AsyncClient() as client:
+
+            response = await client.get(
+
+                delta_link,
+
+                headers={
+                    "Authorization":
+                    f"Bearer {access_token}"
+                }
+
+            )
+
+            print(
+                "delta_status =",
+                response.status_code
+            )
+
+            print(
+                "delta_body =",
                 response.text
             )
 
             return (
                 response.json()
             )
+            
+    # @staticmethod
+    # async def get_first_delta(
+    #     drive_id: str,
+    # ):
+
+    #     headers = await (
+    #         SharePointService
+    #         ._get_headers()
+    #     )
+
+    #     async with httpx.AsyncClient() as client:
+
+    #         response = await client.get(
+
+    #             f"https://graph.microsoft.com/v1.0"
+    #             f"/drives/{drive_id}"
+    #             f"/root/delta",
+
+    #             headers=headers,
+
+    #         )
+
+    #         print(
+    #             "first_delta_status =",
+    #             response.status_code,
+    #         )
+
+    #         print(
+    #             "first_delta_body =",
+    #             response.text,
+    #         )
+
+    #         return (
+    #             response.json()
+    #         )
+  
+    @staticmethod
+    async def get_first_delta(
+        drive_id: str,
+    ):
+
+        access_token = await (
+            SharePointService
+            ._get_access_token()
+        )
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+
+            response = await client.get(
+
+                f"https://graph.microsoft.com/v1.0"
+                f"/drives/{drive_id}"
+                f"/root/delta",
+
+                headers={
+                    "Authorization":
+                    f"Bearer {access_token}"
+                }
+
+            )
+
+            print(
+                "delta_status =",
+                response.status_code
+            )
+
+            print(
+                "delta_body =",
+                response.text
+            )
+
+            return (
+                response.json()
+            )
+                    
+        

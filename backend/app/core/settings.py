@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     SHAREPOINT_DRIVE_ID: str =""
     
     LOGIC_APP_URL: str 
+    
+    AZURE_OPENAI_ENDPOINT: str
+    AZURE_OPENAI_API_KEY: str
+    AZURE_OPENAI_API_VERSION: str
+    AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str
 
 
     model_config = SettingsConfigDict(
