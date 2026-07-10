@@ -12,6 +12,9 @@ type UploadRequest = {
   securityLevel: string;
 
   documentType: string;
+  siteId: string;
+  driveId: string;
+  folderId?: string;
 
 };
 
@@ -48,10 +51,26 @@ formData.append(
   body.documentType
 );
 
+formData.append(
+  "site_id",
+  body.siteId
+);
+
+formData.append(
+  "drive_id",
+  body.driveId
+);
+
+if (body.folderId) {
+    formData.append("folder_id", body.folderId);
+}
+  for (const [key, value] of formData.entries()) {
+    console.log(key, value);
+}
   const res =
   await api.post(
 
-    "/documents/upload",
+    "/documents/upload-sharepoint",
 
     formData,
 
@@ -93,4 +112,9 @@ export async function getSyncStatus() {
   );
 
   return res.data;
+}
+export async function getUploadOptions() {
+  const response = await api.get("/documents/upload-options");
+
+  return response.data;
 }
