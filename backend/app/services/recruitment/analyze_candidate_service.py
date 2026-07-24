@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from uuid import UUID
 
@@ -5,6 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.not_found_exception import (
     NotFoundException,
+)
+
+from app.enums.prompt_code import (
+    PromptCode,
 )
 
 from app.repositories.ai_model_repository import (
@@ -42,7 +47,6 @@ from app.utils.extract.document_extraction import (
 from app.utils.storage.supabase_storage import (
     SupabaseStorage,
 )
-from app.enums.prompt_code import PromptCode
 
 
 class AnalyzeCandidateService:
@@ -53,6 +57,7 @@ class AnalyzeCandidateService:
         candidate_id: UUID,
         model_id: UUID,
     ):
+
         candidate = await RecruitmentCandidateRepository.get_by_id(
             db=db,
             id=candidate_id,
@@ -65,7 +70,6 @@ class AnalyzeCandidateService:
 
         campaign = await RecruitmentCampaignRepository.get_by_id(
             db=db,
-            
             id=candidate.campaign_id,
         )
 
@@ -78,6 +82,7 @@ class AnalyzeCandidateService:
             db=db,
             code=PromptCode.RECRUITMENT_DEFAULT,
         )
+
         if prompt is None:
             raise NotFoundException(
                 "Prompt not found."
@@ -110,13 +115,6 @@ class AnalyzeCandidateService:
             extraction = DocumentExtractor.extract(
                 local_file,
             )
-            print("EXTRACTION:", repr(extraction.text))
-            
-            print("CV:")
-            print(repr(extraction.text[:500]))
-
-            print("JD:")
-            print(repr(campaign.job_description[:500]))
 
             system_prompt, user_prompt = PromptBuilderAzure.build(
                 system_prompt=prompt.system_prompt,
@@ -125,8 +123,6 @@ class AnalyzeCandidateService:
                     "cv_text": extraction.text,
                 },
             )
-            print("SYSTEM PROMPT:", repr(system_prompt))
-            print("USER PROMPT:", repr(user_prompt))
 
             ai = AzureOpenAIService()
 
@@ -144,17 +140,24 @@ class AnalyzeCandidateService:
                 ],
             )
 
+            try:
+                result_json = json.loads(result)
+            except json.JSONDecodeError as ex:
+                raise ValueError(
+                    "Azure OpenAI did not return valid JSON."
+                ) from ex
+
             return await RecruitmentCandidateResultRepository.create(
                 db=db,
                 candidate_id=candidate.id,
                 model=model.model_name,
-                score=result["score"],
-                summary=result.get("summary"),
-                strengths=result.get("strengths"),
-                weaknesses=result.get("weaknesses"),
-                assessment=result.get("assessment"),
-                reason=result.get("reason"),
-                raw_response=result,
+                score=result_json["score"],
+                summary=result_json.get("summary"),
+                strengths=result_json.get("strengths"),
+                weaknesses=result_json.get("weaknesses"),
+                assessment=result_json.get("assessment"),
+                reason=result_json.get("reason"),
+                raw_response=result_json,
             )
 
         finally:

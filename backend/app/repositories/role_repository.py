@@ -43,3 +43,20 @@ class RoleRepository:
             for row in result.all()
         ]
         
+
+
+    @staticmethod
+    async def get_by_id(
+        db: AsyncSession,
+        role_id: int,
+    ) -> str | None:
+
+        result = await db.execute(
+            select(Role.name)
+            .where(
+                Role.id == role_id
+            )
+        )
+
+        return result.scalar_one_or_none()
+        

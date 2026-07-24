@@ -31,6 +31,9 @@ from app.repositories.permission_repository import (
     PermissionRepository
 
 )
+from app.repositories.role_repository import (
+    RoleRepository
+)
 
 from app.services.azure.azure_search_service import (
 
@@ -40,6 +43,10 @@ from app.services.azure.azure_search_service import (
 
 from app.services.rag.rag_service import (
     RagService
+)
+
+from app.core.not_found_exception import (
+    NotFoundException,
 )
 
 from app.services.message.message_service import (
@@ -103,19 +110,25 @@ async def query(
 ):
 
 
+ role_name = await (
+    RoleRepository.get_by_id(
+        db=db,
+        role_id=body.role_id,
+    )
+)
+
+ if role_name is None:
+    raise NotFoundException(
+        "Role not found."
+    )
+
  permissions = await (
-
-  PermissionRepository
-
-  .get_role_access(
-
-   db,
-
-   body.role
-
-  )
-
- )
+    PermissionRepository
+    .get_role_access(
+        db=db,
+        role_name=role_name,
+    )
+)
 #  retrieval_query = await (
 #      SessionMemoryService
 #      .build_retrieval_query(
@@ -225,7 +238,8 @@ async def query(
 
    chunks=
 
-   chunks
+   chunks,
+    model_id=body.model_id,
 
   )
 
@@ -281,13 +295,7 @@ async def query(
 
   answer,
 
-  "chunks":
-
-  chunks,
-   "conversation_id":
-
- body.conversation_id,
-
+ 
 
  }
  

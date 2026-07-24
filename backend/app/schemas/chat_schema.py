@@ -18,15 +18,17 @@ class ChatRequest(
     BaseModel
 
 ):
-    conversation_id:UUID
+    conversation_id:str
 
     question:str
 
 
-    email:str
+    
 
 
-    role:str
+    role_id:int
+    
+    model_id:str
 
 
 class ChatResponse(
