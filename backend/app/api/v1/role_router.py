@@ -32,7 +32,8 @@ async def create_role(
 
 
 @router.get(
-    "/",
+    "",
+    
     response_model=list[RoleResponse]
 )
 async def get_roles(

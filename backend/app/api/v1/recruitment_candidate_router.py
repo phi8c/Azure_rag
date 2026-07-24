@@ -41,7 +41,7 @@ router = APIRouter(
 
 
 @router.post(
-    "/",
+    "",
     response_model=RecruitmentCampaignResponse
 )
 async def create_campaign(
