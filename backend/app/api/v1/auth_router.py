@@ -1,0 +1,52 @@
+from fastapi import APIRouter
+from fastapi import Depends
+from fastapi import Query
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+
+from app.schemas.auth import LoginResponse
+
+from app.services.auth.auth_service import AuthService
+
+from app.services.microsoft.microsoft_auth_service import (
+    MicrosoftAuthService,
+)
+
+router = APIRouter(
+    prefix="/auth",
+    tags=["Authentication"],
+)
+
+
+@router.get("/microsoft/login")
+async def microsoft_login():
+
+    return {
+        "login_url": MicrosoftAuthService.get_login_url(),
+    }
+
+
+from fastapi.responses import RedirectResponse
+
+FRONTEND_URL = "http://localhost:5173"
+
+
+@router.get("/microsoft/callback")
+async def microsoft_callback(
+    code: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+
+    login = await AuthService.microsoft_login(
+        db=db,
+        code=code,
+    )
+
+    return RedirectResponse(
+        url=(
+            f"{FRONTEND_URL}/auth/callback"
+            f"?token={login.access_token}"
+        )
+    )

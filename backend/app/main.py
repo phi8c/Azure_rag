@@ -43,6 +43,21 @@ from app.api.v1.graph_router import (
 from app.api.v1.graph_chat_router import (
     router as graph_chat_router
 )
+from app.api.v1.recruitment_candidate_router import (
+    router as recruitment_candidate_router
+)  
+
+from app.api.v1.model_router import (
+    router as model_router
+) 
+
+from app.api.v1.auth_router import (
+    router as auth_router
+)
+
+from app.api.v1.planner_router import (
+    router as planner_router
+)
 
 from fastapi.middleware.cors import (
 
@@ -125,3 +140,7 @@ app.include_router(conversation)
 app.include_router(document_router)
 app.include_router(graph_router)
 app.include_router(graph_chat_router)
+app.include_router(recruitment_candidate_router)
+app.include_router(model_router)
+app.include_router(auth_router)
+app.include_router(planner_router)

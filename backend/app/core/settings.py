@@ -9,6 +9,8 @@ from pydantic_settings import (
 class Settings(BaseSettings):
 
     DATABASE_URL: str | None = None
+    SUPABASE_URL: str | None = None
+    SUPABASE_ANON_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
     GROQ_API_KEY: str | None = None
 
@@ -60,6 +62,7 @@ class Settings(BaseSettings):
     AZURE_OPENAI_API_KEY: str
     AZURE_OPENAI_API_VERSION: str
     AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str
+    MICROSOFT_REDIRECT_URI: str
 
 
     model_config = SettingsConfigDict(
