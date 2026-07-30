@@ -1,4 +1,5 @@
 from typing import Any
+
 import re
 
 
@@ -6,59 +7,39 @@ class PromptBuilderAzure:
 
     @staticmethod
     def build(
-        system_prompt: str,
-        variables: dict[str, Any],
-    ) -> tuple[str, str]:
-
-        system = system_prompt
-
-        for key, value in variables.items():
-            placeholder = f"{{{{{key}}}}}"
-            system = system.replace(
-                placeholder,
-                "" if value is None else str(value),
-            )
-
-        PromptBuilderAzure._validate(system)
-
-        user = PromptBuilderAzure._build_user_prompt(
-            variables,
-        )
-
-        return (
-            system,
-            user,
-        )
-
-    @staticmethod
-    def _build_user_prompt(
-        variables: dict[str, Any],
+        prompt: str,
+        cv_text: str,
+        job_description: str | None = None,
     ) -> str:
 
-        return f"""
-Job Description:
+        sections: list[str] = [
+            prompt.strip(),
+        ]
 
-{variables.get("job_description", "")}
+        if job_description and job_description.strip():
 
-----------------------------------------
-
-CV:
-
-{variables.get("cv_text", "")}
-""".strip()
-
-    @staticmethod
-    def _validate(
-        prompt: str,
-    ) -> None:
-
-        placeholders = re.findall(
-            r"\{\{(.*?)\}\}",
-            prompt,
-        )
-
-        if placeholders:
-            raise ValueError(
-                "Missing prompt variables: "
-                + ", ".join(placeholders)
+            sections.extend(
+                [
+                    "",
+                    "=" * 80,
+                    "JOB DESCRIPTION",
+                    "=" * 80,
+                    job_description.strip(),
+                ],
             )
+
+        if cv_text and cv_text.strip():
+
+            sections.extend(
+                [
+                    "",
+                    "=" * 80,
+                    "CANDIDATE CV",
+                    "=" * 80,
+                    cv_text.strip(),
+                ],
+            )
+
+        return "\n".join(
+            sections,
+        )

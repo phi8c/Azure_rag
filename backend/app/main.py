@@ -58,12 +58,20 @@ from app.api.v1.auth_router import (
 from app.api.v1.planner_router import (
     router as planner_router
 )
+from app.api.v1.prompt_router import (
+    router as prompt_router
+)
 
 from fastapi.middleware.cors import (
 
     CORSMiddleware
 
 )
+
+
+
+from app.startup.queue_consumer import start_queue_consumers
+
 
 
 
@@ -100,6 +108,16 @@ app = FastAPI(
     ]
 
 )
+
+
+@app.on_event("startup")
+async def startup():
+    asyncio.create_task(
+        sharepoint_delta_worker(),
+    )
+
+    await start_queue_consumers()
+
 
 
 app.add_middleware(
@@ -144,3 +162,4 @@ app.include_router(recruitment_candidate_router)
 app.include_router(model_router)
 app.include_router(auth_router)
 app.include_router(planner_router)
+app.include_router(prompt_router)

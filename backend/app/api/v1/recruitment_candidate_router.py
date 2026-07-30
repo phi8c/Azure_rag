@@ -3,6 +3,12 @@ from fastapi import (
     Depends,
     File,
     UploadFile,
+    Form,
+)
+
+
+from app.schemas.create_review_request import (
+    CreateReviewRequest,
 )
 
 from uuid import UUID
@@ -32,6 +38,17 @@ from app.services.recruitment.analyze_candidate_service import (
 )
 from app.schemas.analyze_candidate_request import (
     AnalyzeCandidateRequest,
+)
+
+from app.services.review.review_service import (
+    ReviewService,
+)
+
+from app.schemas.review_dto import (
+    ReviewJobResultResponse,
+)
+from app.services.review.review_service import (
+    ReviewService,
 )
 
 router = APIRouter(
@@ -86,3 +103,41 @@ async def analyze_candidate(
     )
 
     return result
+
+@router.post("/analyze")
+async def create_review(
+    model_id: UUID = Form(...),
+    job_description: str = Form(...),
+    files: list[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+
+    request = CreateReviewRequest(
+        model_id=model_id,
+        job_description=job_description,
+        files=files,
+    )
+
+    review_job = await ReviewService.create_review(
+        db=db,
+        request=request,
+    )
+
+    return review_job
+
+
+@router.get(
+    "/jobs/{job_id}",
+    response_model=ReviewJobResultResponse,
+)
+async def get_review_job(
+    job_id: UUID,
+    db: AsyncSession = Depends(
+        get_db,
+    ),
+) -> ReviewJobResultResponse:
+
+    return await ReviewService.get_result(
+        db=db,
+        job_id=job_id,
+    )

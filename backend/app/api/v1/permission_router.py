@@ -1,63 +1,62 @@
-from fastapi import *
+from fastapi import (
+    APIRouter,
+    Depends,
+)
 
 from sqlalchemy.ext.asyncio import (
-    AsyncSession
+    AsyncSession,
 )
 
 from app.core.database import (
-    get_db
+    get_db,
 )
 
-from app.repositories.permission_repository import (
-    PermissionRepository
+from app.schemas.permission_request import (
+    CreatePermissionRequest,
+    UpdatePermissionRequest,
+)
+
+from app.services.permission.permission_service import (
+    PermissionService,
 )
 
 
 router = APIRouter(
-
-    prefix=
-    "/permissions",
-
-    tags=
-    ["Permissions"]
-
+    prefix="/permissions",
+    tags=["Permissions"],
 )
 
 
-@router.get(
-
-"/{role}"
-
-)
-
+@router.get("/{role}")
 async def get_permission(
-
-    role:
-    str,
-
-    db:
-    AsyncSession
-
-    =
-
-    Depends(
-        get_db
-    )
-
+    role: str,
+    db: AsyncSession = Depends(get_db),
 ):
-
-
-    result = await (
-
-        PermissionRepository
-        .get_role_access(
-
-            db,
-
-            role
-        )
-
+    return await PermissionService.get_role_access(
+        db,
+        role,
     )
 
 
-    return result
+@router.post("")
+async def create_permission(
+    request: CreatePermissionRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    return await PermissionService.create(
+        db,
+        request,
+    )
+
+
+@router.put("/{id}")
+async def update_permission(
+    id: int,
+    request: UpdatePermissionRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    return await PermissionService.update(
+        db,
+        id,
+        request,
+    )

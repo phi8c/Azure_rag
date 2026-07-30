@@ -1,0 +1,116 @@
+import json
+from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.not_found_exception import (
+    NotFoundException,
+)
+from app.enums.prompt_code import (
+    PromptCode,
+)
+from app.repositories.ai_model_repository import (
+    AIModelRepository,  
+)
+from app.repositories.ai_prompt_repository import (
+    AIPromptRepository,
+)
+from app.services.llm.azure_openai_service import (
+    AzureOpenAIService,
+)
+from app.services.prompt.prompt_builder_azure import (
+    PromptBuilderAzure,
+)
+from app.utils.extract.document_extraction import (
+    DocumentExtractor,
+)
+
+
+class ReviewAIService:
+
+    @staticmethod
+    async def execute(
+        db: AsyncSession,
+        model_id: UUID,
+        file_path: str,
+        job_description: str | None = None,
+        prompt_code: PromptCode = (
+            PromptCode.RECRUITMENT_DEFAULT
+        ),
+    ) -> dict:
+
+        prompt = await (
+            AIPromptRepository.get_by_code(
+                db=db,
+                code=prompt_code,
+            )
+        )
+
+        if prompt is None:
+
+            raise NotFoundException(
+                "Prompt not found.",
+            )
+
+        model = await (
+            AIModelRepository.get_by_id(
+                db=db,
+                id=model_id,
+            )
+        )
+
+        if model is None:
+
+            raise NotFoundException(
+                "Model not found.",
+            )
+
+        extraction = (
+            DocumentExtractor.extract(
+                file_path,
+            )
+        )
+
+        print("=" * 80)
+        print(extraction.text[:1000])
+        print("=" * 80)
+
+        built_prompt = (
+            PromptBuilderAzure.build(
+                prompt=prompt.system_prompt,
+                cv_text=extraction.text,
+                job_description=job_description,
+            )
+        )
+
+        print("=" * 80)
+        print(built_prompt)
+        print("=" * 80)
+
+        ai = AzureOpenAIService()
+
+        result = await ai.chat(
+            model=model.model_name,
+            messages=[
+                {
+                    "role": "user",
+                    "content": built_prompt,
+                },
+            ],
+        )
+
+        try:
+
+            return json.loads(
+                result,
+            )
+
+        except json.JSONDecodeError as ex:
+
+            raise ValueError(
+                "Azure OpenAI did not return valid JSON.",
+            ) from ex
+            
+            
+            
+    

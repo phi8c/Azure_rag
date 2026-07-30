@@ -4,6 +4,9 @@ from enum import Enum
 class PromptCode( Enum):
     # Recruitment
     RECRUITMENT_DEFAULT = "RECRUITMENT_REVIEW"
+    
+    
+    REVIEW_DEFAULT = "REVIEW_DEFAULT"
 
     # Project Tracking
     PROJECT_TRACKING_DEFAULT = "PROJECT_TRACKING_DEFAULT"

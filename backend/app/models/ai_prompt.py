@@ -5,7 +5,8 @@ from sqlalchemy import (
     String,
     Text,
     Boolean,
-    DateTime
+    DateTime,
+    text,
 )
 
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -23,9 +24,10 @@ class AIPrompt(Base):
     __tablename__ = "ai_prompts"
 
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
-        primary_key=True
-    )
+    PG_UUID(as_uuid=True),
+    primary_key=True,
+    server_default=text("gen_random_uuid()"),
+)
 
     code: Mapped[str] = mapped_column(
         String(100),

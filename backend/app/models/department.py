@@ -27,7 +27,7 @@ class Department(Base):
             Integer,
 
             primary_key=True
-        )
+        )   
 
     )
 
