@@ -9,6 +9,8 @@ from sqlalchemy import (
  select
 
 )
+from uuid import UUID
+from typing import Optional
 
 from app.models.conversation import (
     
@@ -23,9 +25,16 @@ class ConversationRepository:
     @staticmethod
     async def create(
         db: AsyncSession,
-        email:str
+        conversation_id: UUID,
+        title: str,
+        email: Optional[str] = None,
+        
     ):
      item = Conversation( 
+                         
+        id=conversation_id,
+                         
+        title=title,
                          
         user_email = email  
                          )
@@ -167,5 +176,18 @@ class ConversationRepository:
         await db.refresh(item)
 
         return item
+    
+    @staticmethod
+    async def get_by_id(
+        db: AsyncSession,
+        conversation_id: UUID,
+    ) -> Conversation | None:
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == conversation_id
+            )
+        )
+
+        return result.scalar_one_or_none()
 
                 

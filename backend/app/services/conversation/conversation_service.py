@@ -3,16 +3,21 @@ from app.repositories.conversation_repository import (
  ConversationRepository
 
 )
+from uuid import UUID
 class ConversationService:
     @staticmethod
     async def create(
         db,
-        email
+        conversation_id: UUID,
+        title: str,
+        email: str | None = None
     ):
      return await (
          ConversationRepository.create(
              db,
-             email
+             conversation_id=conversation_id,
+             title=title,
+             email=email,
         
          )
      )

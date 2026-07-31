@@ -18,6 +18,8 @@ from app.core.database import (
 
 )
 
+from uuid import uuid4
+
 from app.schemas.chat_schema import (
 
     ChatRequest,
@@ -66,6 +68,13 @@ from app.services.session_memory.conversation_summary_service import (
 
 from app.services.rewrite_service.query_rewrite_service import (
     QueryRewriteService
+)
+from app.services.conversation.conversation_service import (
+    ConversationService
+)
+
+from app.repositories.conversation_repository import (
+    ConversationRepository
 )
 
 
@@ -120,6 +129,22 @@ async def query(
  if role_name is None:
     raise NotFoundException(
         "Role not found."
+    )
+    
+ if body.conversation_id is None:
+    body.conversation_id = uuid4()
+
+ conversation = await ConversationRepository.get_by_id(
+        db=db,
+        conversation_id=body.conversation_id,
+    )
+
+ if conversation is None:
+    await ConversationService.create(
+        db=db,
+        conversation_id=body.conversation_id,
+        title=body.question,
+        email=None,
     )
 
  permissions = await (
@@ -290,13 +315,10 @@ async def query(
 
 
  return {
-
-  "answer":
-
-  answer,
-
- 
-
- }
+    "conversation_id": str(body.conversation_id),
+    "title": str(body.question),
+    "answer": answer,
+    
+}
  
  

@@ -3,6 +3,7 @@ from sqlalchemy import (
     String,
     DateTime
 )
+from typing import Optional
 
 from sqlalchemy.orm import (
     Mapped,
@@ -35,13 +36,10 @@ class Conversation(Base):
         
         
     )
-    user_email: Mapped[str|None] = (
-        mapped_column(
-            String(50),
-            nullable= True
-            
-        )
-    )
+    user_email: Mapped[Optional[str]] = mapped_column(
+    String(50),
+    nullable=True,
+)
     title: Mapped[str|None] = (
         mapped_column(
             String(50),

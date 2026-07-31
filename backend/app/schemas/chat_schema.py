@@ -9,6 +9,7 @@ from typing import (
     Any
 
 )
+from typing import Optional
 
 from uuid import UUID
 
@@ -18,7 +19,7 @@ class ChatRequest(
     BaseModel
 
 ):
-    conversation_id:str
+    conversation_id: Optional[UUID] = None
 
     question:str
 
