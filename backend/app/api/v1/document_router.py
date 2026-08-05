@@ -8,6 +8,7 @@ from fastapi import (
     Request
 )
 import asyncio
+from uuid import UUID
 
 
 from app.services.sharepoint.sharepoint_service import (
@@ -53,12 +54,25 @@ from app.services.knowledge.graph_ingestion_service import (
     GraphIngestionService
 )
 
+from app.services.task.tracking_task_service import ( TrackingTaskService )
+
+from app.services.sharepoint.azure_project_tracking_service import AzureProjectTrackingService
+from app.services.sharepoint.project_tracking_reader_service import ProjectTrackingReaderService
+from app.services.sharepoint.project_tracking_sync_service import ProjectTrackingSyncService
+
 from app.core.database import (
     get_db,
     AsyncSessionLocal
 )
 
 import json
+
+from app.schemas.tracking_chat_request import TrackingChatRequest
+from app.services.govern.executive_data_sync_service import ExecutiveDataSyncService
+from app.schemas.execute_schema import ExecutiveDataRequest, ExecutiveDataChatRequest
+
+
+
 
 router = APIRouter(
     prefix="/documents",
@@ -695,3 +709,211 @@ async def check_delta(
     return {
         "changed": changed,
     }
+    
+
+@router.get(
+    "/projects",
+)
+async def get_projects():
+
+    return await (
+        AzureProjectTrackingService
+        .get_projects()
+    )
+    
+@router.get(
+    "/projects/{project_code}",
+)
+async def get_project_detail(
+
+    project_code: str,
+
+):
+
+    result = await (
+
+        ProjectTrackingReaderService
+        .load_project(
+            project_code=project_code,
+        )
+
+    )
+
+    return result
+
+
+@router.post("/sync/projects")
+async def sync(
+
+    db: AsyncSession = Depends(
+        get_db,
+    ),
+
+):
+
+    return await (
+
+        ProjectTrackingSyncService
+        .sync_all(
+
+            db=db,
+
+        )
+
+    )
+
+
+@router.post("/sync/{project_code}")
+async def sync_project(
+
+    project_code: str,
+
+    db: AsyncSession = Depends(
+        get_db,
+    ),
+
+):
+
+    return await (
+
+        ProjectTrackingSyncService
+        .sync_project(
+
+            db=db,
+
+            project_code=project_code,
+
+        )
+
+    )
+    
+    
+@router.get(
+    "/project-tracking/projects",
+)
+async def get_projects(
+
+    db: AsyncSession = Depends(
+        get_db,
+    ),
+
+):
+
+    return await (
+
+        TrackingTaskService
+        .get_projects(
+
+            db=db,
+
+        )
+
+    )
+
+
+@router.get(
+    "/project-tracking/projects/{project_code}",
+)
+async def get_project(
+
+    project_code: str,
+
+    db: AsyncSession = Depends(
+        get_db,
+    ),
+
+):
+
+    return await (
+
+        TrackingTaskService
+        .get_project(
+
+            db=db,
+
+            project_code=project_code,
+
+        )
+
+    )
+    
+@router.post("/tracking/chat")
+async def tracking_chat(
+
+    request: TrackingChatRequest,
+
+    db: AsyncSession = Depends(
+        get_db,
+    ),
+
+):
+
+    return await (
+
+        TrackingTaskService
+        .chat(
+
+            db=db,
+
+            question=request.question,
+
+            model_id=request.model_id,
+
+        )
+
+    )
+    
+    
+@router.post("/executive-data/sync")
+async def sync_executive_data(
+    
+    
+    request: ExecutiveDataRequest,
+
+    db: AsyncSession = Depends(
+        get_db,
+    ),
+    
+
+):
+
+    return await (
+
+        ExecutiveDataSyncService
+        .sync_all(
+
+            db=db,
+            model_id=request.model_id,
+            
+
+        )
+
+    )
+    
+@router.post(
+    "/executive-data/chat",
+)
+async def executive_data_chat(
+
+    request: ExecutiveDataChatRequest,
+
+    db: AsyncSession = Depends(
+        get_db,
+    ),
+
+):
+
+    return await (
+
+        ExecutiveDataSyncService
+        .chat(
+
+            db=db,
+
+            question=request.question,
+
+            model_id=request.model_id,
+
+        )
+
+    )

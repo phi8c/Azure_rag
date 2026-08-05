@@ -62,6 +62,13 @@ from app.api.v1.prompt_router import (
     router as prompt_router
 )
 
+from app.api.v1.contract_router import (
+    router as contract_router)
+
+from app.workers.project_tracking_worker import (
+    ProjectTrackingWorker,
+)
+
 from fastapi.middleware.cors import (
 
     CORSMiddleware
@@ -71,6 +78,7 @@ from fastapi.middleware.cors import (
 
 
 from app.startup.queue_consumer import start_queue_consumers
+from app.workers.executive_data_worker import ExecutiveDataWorker
 
 
 
@@ -110,13 +118,13 @@ app = FastAPI(
 )
 
 
-@app.on_event("startup")
-async def startup():
-    asyncio.create_task(
-        sharepoint_delta_worker(),
-    )
+# @app.on_event("startup")
+# async def startup():
+#     asyncio.create_task(
+#         sharepoint_delta_worker(),
+#     )
 
-    await start_queue_consumers()
+#     await start_queue_consumers()
 
 
 
@@ -140,10 +148,57 @@ app.add_middleware(
 
 
 
+
+# @app.on_event("startup")
+# async def startup():
+
+  
+
+#     asyncio.create_task(
+#         ProjectTrackingWorker.run()
+#     )
+
+
+
+# @app.on_event("startup")
+# async def startup():
+#     asyncio.create_task(
+#         sharepoint_delta_worker()
+#     )
+
+
+
 @app.on_event("startup")
 async def startup():
+
+    #
+    # SharePoint Delta
+    #
+
     asyncio.create_task(
-        sharepoint_delta_worker()
+        sharepoint_delta_worker(),
+    )
+
+    #
+    # Queue
+    #
+
+    await start_queue_consumers()
+
+    #
+    # Project Tracking
+    #
+
+    asyncio.create_task(
+        ProjectTrackingWorker.run(),
+    )
+
+    #
+    # Executive Data
+    #
+
+    asyncio.create_task(
+        ExecutiveDataWorker.run(),
     )
 
 app.include_router(role_router)
@@ -163,3 +218,4 @@ app.include_router(model_router)
 app.include_router(auth_router)
 app.include_router(planner_router)
 app.include_router(prompt_router)
+app.include_router(contract_router)

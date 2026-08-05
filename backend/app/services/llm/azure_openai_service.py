@@ -37,3 +37,32 @@ class AzureOpenAIService:
             .message.content
             or ""
         )
+        
+    async def generate(
+        self,
+        model: str,
+        prompt: str,
+        temperature: float = 0.0,
+    ) -> str:
+
+        response = await self._client.chat.completions.create(
+
+            model=model,
+
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+
+            temperature=temperature,
+
+        )
+
+        return (
+            response
+            .choices[0]
+            .message.content
+            or ""
+        )

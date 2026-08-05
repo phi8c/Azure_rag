@@ -32,6 +32,8 @@ class ConversationSummaryService:
                 conversation_id=conversation_id
             )
         )
+        
+        print("summary_record", summary_record)
 
         current_summary = ""
         processed_count = 0

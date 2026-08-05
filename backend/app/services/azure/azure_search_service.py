@@ -183,37 +183,30 @@ class AzureSearchService:
         )
 
         return [
+        {
+            "score": doc.get("@search.score"),
 
-            {
+            "chunk_id": doc.get("chunk_id"),
 
-                "chunk_id":
+            "parent_id": doc.get("parent_id"),
 
-                doc.get(
-                    "chunk_id"
-                ),
+            "title": doc.get("title"),
 
-                "content":
+            "content": doc.get("chunk"),
 
-                doc.get(
-                    "chunk"
-                ),
+            "source_file": doc.get("source_file"),
 
-                "department":
+            "department": doc.get("department"),
 
-                doc.get(
-                    "department"
-                ),
+            "owner_role": doc.get("owner_role"),
 
-                "sensitivity":
+            "security_level": doc.get("security_level"),
 
-                doc.get(
-                    "sensitivity"
-                )
+            "document_type": doc.get("document_type"),
 
-            }
-
-            for doc
-
-            in results
-
-        ]
+            "sensitivity": doc.get("sensitivity"),
+            
+            
+        }
+        for doc in results
+    ]

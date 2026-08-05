@@ -20,6 +20,8 @@ from app.services.session_memory.session_memory_service import (
     SessionMemoryService,
 )
 
+from app.enums.prompt_code import ( PromptCode)
+
 
 class RagService:
 
@@ -33,6 +35,7 @@ class RagService:
         question: str,
         chunks: list,
         model_id: UUID,
+        mode: PromptCode,
     ):
 
         # ======================================
@@ -51,18 +54,38 @@ class RagService:
         # Prompt
         # ======================================
 
-        prompt = await (
-            AIPromptRepository
-            .get_by_code(
+        # ======================================
+        # Prompt
+        # ======================================
+
+        if mode == PromptCode.PUBLIC:
+
+            prompt = await AIPromptRepository.get_by_code(
                 db=db,
-                code=PromptCode.RAG_CHAT,
+                code=mode,
             )
-        )
+
+        elif mode == PromptCode.INTERNAL:
+
+            prompt = await AIPromptRepository.get_by_code(
+                db=db,
+                code=mode,
+            )
+
+        elif mode == PromptCode.COMBINE:
+
+            prompt = await AIPromptRepository.get_by_code(
+                db=db,
+                code=mode,
+            )
+
+        else:
+
+            raise Exception("Invalid chat mode.")
 
         if prompt is None:
-            raise Exception(
-                "Prompt RAG_CHAT not found."
-            )
+            raise Exception("Prompt not found.")
+
 
         # ======================================
         # AI Model
@@ -85,13 +108,17 @@ class RagService:
         # Build Context
         # ======================================
 
-        context = "\n\n".join(
-            chunk["content"]
-            for chunk in chunks
-            if chunk.get("content")
-        )
+        contexts = []
 
-        # ======================================
+        for chunk in chunks:
+
+            contexts.append(
+                chunk["content"]
+            )
+
+        context = "\n\n".join(contexts)
+
+                # ======================================
         # Build System Prompt
         # ======================================
 

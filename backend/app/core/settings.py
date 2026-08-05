@@ -2,6 +2,7 @@ from pydantic_settings import (
     BaseSettings,
     SettingsConfigDict
 )
+from uuid import UUID
 
 
 
@@ -63,6 +64,27 @@ class Settings(BaseSettings):
     AZURE_OPENAI_API_VERSION: str
     AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str
     MICROSOFT_REDIRECT_URI: str
+    
+    MAX_FILE_REVIEW: int = 5
+    MIN: int = 0
+    
+    
+    PROJECT_TRACKING_SITE_NAME: str
+
+    PROJECT_TRACKING_LIBRARY_NAME: str
+    
+    EXECUTIVE_DATA_SITE_NAME: str
+
+
+
+    EXECUTIVE_DATA_LIBRARY_NAME: str
+    
+    
+   
+    
+    PROJECT_TRACKING_MODEL_ID: UUID 
+    
+    EXECUTIVE_DATA_MODEL_ID: UUID
 
 
     model_config = SettingsConfigDict(

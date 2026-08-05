@@ -13,6 +13,8 @@ from typing import Optional
 
 from uuid import UUID
 
+from app.enums.prompt_code import ( PromptCode)
+
 
 class ChatRequest(
 
@@ -30,6 +32,8 @@ class ChatRequest(
     role_id:int
     
     model_id:str
+    
+    mode: PromptCode
 
 
 class ChatResponse(

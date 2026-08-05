@@ -76,7 +76,10 @@ from app.services.conversation.conversation_service import (
 from app.repositories.conversation_repository import (
     ConversationRepository
 )
+from app.enums.prompt_code import ( PromptCode
+)
 
+import json
 
 router = APIRouter(
 
@@ -186,26 +189,20 @@ async def query(
  
 #  print("in ra retrieval", retrieval_query)
  print("in ra permission", permissions)
+ 
+ 
+ 
+ chunks = []
+ if body.mode != PromptCode.PUBLIC:
+
+    chunks = AzureSearchService.retrieve(
+        question=body.question,
+        permissions=permissions,
+    )
 
 
- chunks = (
 
-  AzureSearchService
-
-  .retrieve(
-
-   question=
-
-   body.question,
-
-   permissions=
-
-   permissions
-
-  )
-
- )
- print(" in ra", chunks)
+ 
 
 
  # =======
@@ -265,11 +262,42 @@ async def query(
 
    chunks,
     model_id=body.model_id,
+    
+    mode=body.mode,
 
   )
 
  )
+ 
+ if body.mode == PromptCode.PUBLIC:
 
+    result = json.loads(answer)
+
+    answer = result["answer"]
+
+    sources = result["sources"]
+
+ else:
+
+    source_map = {}
+
+    for chunk in chunks:
+
+        file = chunk["source_file"]
+
+        if file not in source_map:
+
+            source_map[file] = {
+
+                "source_file": file,
+
+                "excerpt": chunk["content"],
+
+                "type": "internal"
+
+            }
+
+    sources = list(source_map.values())
 
  # =============
 
@@ -318,6 +346,7 @@ async def query(
     "conversation_id": str(body.conversation_id),
     "title": str(body.question),
     "answer": answer,
+    "sources": sources,
     
 }
  

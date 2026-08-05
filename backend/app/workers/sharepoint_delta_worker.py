@@ -27,12 +27,12 @@ async def sharepoint_delta_worker():
 
                 for site in upload_options:
 
-                    print("=" * 80)
-                    print("Checking site:", site["name"])
+                    # print("=" * 80)
+                    # print("Checking site:", site["name"])
 
                     for drive in site["libraries"]:
 
-                        print("Checking drive:", drive["name"])
+                        # print("Checking drive:", drive["name"])
 
                         result = await (
                             DeltaService.check(
@@ -46,7 +46,7 @@ async def sharepoint_delta_worker():
                             )
                         )
 
-                        print("Changed =", result)
+                        # print("Changed =", result)
 
                         if result:
 

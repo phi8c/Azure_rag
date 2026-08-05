@@ -1,9 +1,10 @@
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
 
 
-class ReviewTaskResultResponse(BaseModel):
+class ReviewFileResponse(BaseModel):
 
     task_id: UUID
 
@@ -11,10 +12,10 @@ class ReviewTaskResultResponse(BaseModel):
 
     status: str
 
-    review_result: dict | None
+    review_result: Any | None
 
 
-class ReviewJobResultResponse(BaseModel):
+class ReviewResponse(BaseModel):
 
     job_id: UUID
 
@@ -22,8 +23,4 @@ class ReviewJobResultResponse(BaseModel):
 
     total_files: int
 
-    completed_files: int
-
-    failed_files: int
-
-    tasks: list[ReviewTaskResultResponse]
+    results: list[ReviewFileResponse]
