@@ -1,3 +1,4 @@
+from click import prompt
 from sqlalchemy.ext.asyncio import (
     AsyncSession
 )
@@ -12,6 +13,10 @@ from app.services.prompt.prompt_builder import (
 
 from app.services.llm.llm_factory import (
     LLMFactory
+)
+
+from app.services.llm.azure_openai_service import (
+    AzureOpenAIService,
 )
 
 
@@ -79,21 +84,25 @@ class SensitivityClassifier:
         #print("check prompt", prompt)
 
 
-        llm = (
-            LLMFactory
-            .create_openai(
-                  model="gpt-4.1-mini"
-            )
-        )
-
+        llm = AzureOpenAIService()
 
         result = await (
 
-            llm.generate(
-                prompt
-            )
+    llm.generate(
 
-        )
+        model=
+        "gpt-5.1",
+
+        prompt=
+        prompt,
+
+        temperature=
+        0.2,
+
+    
+    )
+
+)
         print("check prompt", prompt)
 
 

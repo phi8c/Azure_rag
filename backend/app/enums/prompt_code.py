@@ -53,3 +53,5 @@ class PromptCode( Enum):
     CHAT_RAG = "CHAT_RAG"
     
     REVIEW_CV = "REVIEW_CV"
+    
+    
