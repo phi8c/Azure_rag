@@ -165,6 +165,7 @@ class SharePointService:
         owner_role: str,
         security_level: str,
         document_type: str,
+        workspace_code: str
     ):
 
         access_token = await (
@@ -206,7 +207,9 @@ class SharePointService:
                 security_level,
 
                 "Lo_x1ea1_it_x00e0_ili_x1ec7_u":
-                document_type
+                document_type,
+                "Workspace":
+                workspace_code,
 
             }
 
@@ -532,7 +535,11 @@ class SharePointService:
 
         for item in lists["value"]:
 
-            if item["list"]["template"] == "documentLibrary":
+            if item["displayName"].lower() in [
+                "tài liệu",
+                "documents",
+                "shared documents",
+            ]:
 
                 return item
 
@@ -649,5 +656,142 @@ class SharePointService:
             return (
                 response.json()
             )
-                    
-        
+            
+    @staticmethod
+    async def get_folders(
+        drive_id: str,
+        parent_id: str | None = None,
+    ):
+
+        headers = await (
+            SharePointService
+            ._get_headers()
+        )
+
+        if parent_id:
+
+            url = (
+                f"https://graph.microsoft.com/v1.0"
+                f"/drives/{drive_id}"
+                f"/items/{parent_id}"
+                f"/children"
+            )
+
+        else:
+
+            url = (
+                f"https://graph.microsoft.com/v1.0"
+                f"/drives/{drive_id}"
+                f"/root/children"
+            )
+
+        async with httpx.AsyncClient() as client:
+
+            response = await client.get(
+                url,
+                headers=headers,
+            )
+
+        data = response.json()
+
+        folders = []
+
+        for item in data.get("value", []):
+
+            if "folder" not in item:
+                continue
+
+            children = await (
+                SharePointService
+                .get_folders(
+                    drive_id=drive_id,
+                    parent_id=item["id"],
+                )
+            )
+
+            folders.append(
+                {
+                    "id": item["id"],
+                    "name": item["name"],
+                    "children": children,
+                }
+            )
+
+        return folders
+    
+    @staticmethod
+    async def get_upload_folder_tree():
+
+        sites = await (
+            SharePointService
+            .get_sites()
+        )
+
+        result = []
+
+        for site in sites:
+
+            configuration = await (
+                SharePointService
+                .find_configuration_list(
+                    site_id=site["id"],
+                )
+            )
+
+            if configuration is None:
+                continue
+
+            rag = await (
+                SharePointService
+                .get_rag_configuration(
+                    site_id=site["id"],
+                    list_id=configuration["id"],
+                )
+            )
+
+            items = rag.get("value", [])
+
+            if not items:
+                continue
+
+            if not items[0]["fields"].get(
+                "EnableRAG",
+                False,
+            ):
+                continue
+
+            drives = await (
+                SharePointService
+                .get_drives(
+                    site_id=site["id"],
+                )
+            )
+
+            libraries = []
+
+            for drive in drives.get("value", []):
+
+                libraries.append(
+                    {
+                        "id": drive["id"],
+                        "name": drive["name"],
+                        "folders": await (
+                            SharePointService
+                            .get_folders(
+                                drive["id"],
+                            )
+                        ),
+                    }
+                )
+
+            result.append(
+                {
+                    "id": site["id"],
+                    "name": site["name"],
+                    "libraries": libraries,
+                }
+            )
+
+        return result
+                            
+                

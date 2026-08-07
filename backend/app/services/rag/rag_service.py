@@ -21,6 +21,7 @@ from app.services.session_memory.session_memory_service import (
 )
 
 from app.enums.prompt_code import ( PromptCode)
+from app.repositories.rag_config_repository import WorkspaceConfigRepository
 
 
 class RagService:
@@ -36,6 +37,7 @@ class RagService:
         chunks: list,
         model_id: UUID,
         mode: PromptCode,
+        workspace_code: str,
     ):
 
         # ======================================
@@ -152,11 +154,34 @@ class RagService:
         # ======================================
         # Generate
         # ======================================
+        
+        
+        model_config = await (
+        WorkspaceConfigRepository
+        .get_model_config_by_workspace_code(
+
+            db=db,
+
+            workspace_code=
+            workspace_code,
+
+        )
+    ) 
+        temperature = float(
+                model_config.temperature
+            )
+        
+        max_tokens = int(
+                model_config.max_tokens
+            )
+        
+        
 
         answer = await self.llm.chat(
             model=model.model_name,
             messages=messages,
-            temperature=0.2,
+            temperature=temperature,
+            max_completion_tokens=max_tokens
         )
 
         return answer

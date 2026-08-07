@@ -69,6 +69,14 @@ from app.workers.project_tracking_worker import (
     ProjectTrackingWorker,
 )
 
+from app.api.v1.workspace_source_config_router import (
+    router as workspace_source_config_router,
+)
+
+from app.api.v1.rag_config_router import (
+    router as rag_config_router,
+)
+
 from fastapi.middleware.cors import (
 
     CORSMiddleware
@@ -168,38 +176,38 @@ app.add_middleware(
 
 
 
-@app.on_event("startup")
-async def startup():
+# @app.on_event("startup")
+# async def startup():
 
-    #
-    # SharePoint Delta
-    #
+#     #
+#     # SharePoint Delta
+#     #
 
-    asyncio.create_task(
-        sharepoint_delta_worker(),
-    )
+#     asyncio.create_task(
+#         sharepoint_delta_worker(),
+#     )
 
-    #
-    # Queue
-    #
+#     #
+#     # Queue
+#     #
 
-    await start_queue_consumers()
+#     await start_queue_consumers()
 
-    #
-    # Project Tracking
-    #
+#     #
+#     # Project Tracking
+#     #
 
-    asyncio.create_task(
-        ProjectTrackingWorker.run(),
-    )
+#     asyncio.create_task(
+#         ProjectTrackingWorker.run(),
+#     )
 
-    #
-    # Executive Data
-    #
+#     #
+#     # Executive Data
+#     #
 
-    asyncio.create_task(
-        ExecutiveDataWorker.run(),
-    )
+#     asyncio.create_task(
+#         ExecutiveDataWorker.run(),
+#     )
 
 app.include_router(role_router)
 app.include_router(tag_router)
@@ -219,3 +227,5 @@ app.include_router(auth_router)
 app.include_router(planner_router)
 app.include_router(prompt_router)
 app.include_router(contract_router)
+app.include_router(workspace_source_config_router)
+app.include_router(rag_config_router)

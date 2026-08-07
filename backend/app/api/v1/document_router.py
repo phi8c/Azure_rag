@@ -47,6 +47,10 @@ from app.services.ingestion.chunk_processor import (
 from app.repositories.azure_chunk_repository import (
     AzureChunkRepository
 )
+
+from app.repositories.workspace_source_config_repository import (
+    WorkspaceSourceConfigRepository )
+
 from app.services.delta.delta_service import (
    DeltaService
 )
@@ -570,8 +574,10 @@ async def upload_document(
     site_id: str = Form(...),
     drive_id: str = Form(...),
     folder_id: str | None = Form(None),
-    security_level: str = Form(...),
     document_type: str = Form(...),
+    workspace_code: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    
 ):
 
     print("email =", email)
@@ -579,7 +585,6 @@ async def upload_document(
     print("site_id =", site_id)
     print("drive_id =", drive_id)
     print("folder_id =", folder_id)
-    print("security_level =", security_level)
     print("document_type =", document_type)
     print("file_name =", file.filename)
 
@@ -602,6 +607,20 @@ async def upload_document(
         file_name=file.filename,
         file_content=file_content,
     )
+    
+    
+    
+    print("=" * 100)
+    print("UPLOAD RESULT")
+    print(upload_result)
+    print("=" * 100)
+
+    if "id" not in upload_result:
+
+        raise HTTPException(
+            status_code=500,
+            detail=upload_result,
+        )
 
     print("upload_result =", upload_result)
 
@@ -611,6 +630,23 @@ async def upload_document(
             status_code=500,
             detail=upload_result,
         )
+        
+        
+    source_mode = await (
+    WorkspaceSourceConfigRepository
+    .get_data_source_mode_by_document_type(
+        
+        
+        db=db,
+       
+        workspace_code=workspace_code,
+    )
+    )
+
+    if source_mode is None:
+        raise Exception("Document type not found")
+
+    security_level = source_mode.code
 
     drive_item_id = upload_result["id"]
 
@@ -631,6 +667,7 @@ async def upload_document(
         owner_role=owner_role,
         security_level=security_level,
         document_type=document_type,
+        workspace_code=workspace_code
     )
 
     return {
@@ -916,4 +953,15 @@ async def executive_data_chat(
 
         )
 
+    )
+    
+    
+@router.get(
+    "/sharepoint/folders",
+)
+async def get_upload_folders():
+
+    return await (
+        SharePointService
+        .get_upload_folder_tree()
     )

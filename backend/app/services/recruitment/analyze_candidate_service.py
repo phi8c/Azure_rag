@@ -47,6 +47,7 @@ from app.utils.extract.document_extraction import (
 from app.utils.storage.supabase_storage import (
     SupabaseStorage,
 )
+from app.repositories.rag_config_repository import WorkspaceConfigRepository
 
 
 class AnalyzeCandidateService:
@@ -125,6 +126,32 @@ class AnalyzeCandidateService:
             )
 
             ai = AzureOpenAIService()
+            
+            
+            
+            workspace_code = PromptCode.EXECUTIVE_DATA.value
+                            
+            model_config = await (
+                WorkspaceConfigRepository
+                .get_model_config_by_workspace_code(
+                    
+                                    db=db,
+                    
+                                    workspace_code=
+                                    workspace_code,
+                    
+                                )
+                            )
+                            
+            temperature = float(
+                    model_config.temperature
+                )
+            
+            max_tokens = int(
+                    model_config.max_tokens
+                )
+            max_tokens = model_config.max_tokens
+            
 
             result = await ai.chat(
                 model=model.model_name,
@@ -138,6 +165,9 @@ class AnalyzeCandidateService:
                         "content": user_prompt,
                     },
                 ],
+                
+                temperature=temperature,
+                max_completion_tokens=max_tokens
             )
 
             try:

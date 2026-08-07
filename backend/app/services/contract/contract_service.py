@@ -39,6 +39,7 @@ from app.core.settings import (
 from app.models.contract_raw import ContractRaw
 from app.repositories.contract_repository import ContractRepository
 from app.models.contract_dashboard import ContractDashboard
+from app.repositories.rag_config_repository import WorkspaceConfigRepository
 
 
 class ContractService:
@@ -121,13 +122,32 @@ Nội dung hợp đồng:
         #
         # AI
         #
+        workspace_code = PromptCode.CONTRACT_ANALYZE.value
+        
+        model_config = await (
+            WorkspaceConfigRepository
+            .get_model_config_by_workspace_code(
+
+                db=db,
+
+                workspace_code=
+                workspace_code,
+
+            )
+        )
+        
+        temperature = model_config.temperature
+        max_tokens = model_config.max_tokens
+        
+        
         result =  await self.llm.chat(
 
             model=model.model_name,
 
             messages=messages,
 
-            temperature=0.2,
+            temperature=temperature,
+            max_completion_tokens=max_tokens
 
         )
         
@@ -486,13 +506,38 @@ Nội dung hợp đồng:
         #
         # Chat
         #
+        
+        
+        workspace_code = PromptCode.CONTRACT_ANALYZE.value  
+                        
+        model_config = await (
+                    WorkspaceConfigRepository
+                    .get_model_config_by_workspace_code(
+                
+                                db=db,
+                
+                                workspace_code=
+                                workspace_code,
+                
+                            )
+                        )
+                        
+        temperature = float(
+        model_config.temperature
+    )
+
+        max_tokens = int(
+        model_config.max_tokens
+    )
+            
 
         answer = await (
             AzureOpenAIService()
             .chat(
                 model=model.model_name,
                 messages=messages,
-                temperature=0.2,
+                temperature=temperature,
+                max_completion_tokens=max_tokens
             )
         )
 

@@ -1,62 +1,71 @@
 from sqlalchemy.ext.asyncio import (
-    AsyncSession
+    AsyncSession,
 )
 
 import json
 
 from app.services.ingestion.sensitivity_classifier import (
-    SensitivityClassifier
+    SensitivityClassifier,
 )
 
 
 class ChunkProcessor:
-
 
     @staticmethod
     async def process_chunk(
 
         db: AsyncSession,
 
-        chunk: dict
+        chunk: dict,
 
     ):
+        
+        
+        print("in ra chunk", chunk)
 
+        security_level = (
+            chunk
+            .get("metadata", {})
+            .get("security_level")
+        )
 
-      
+        #
+        # Không cần AI
+        #
 
-        sensitivity = await (
+        if security_level == "PUBLIC":
 
-           SensitivityClassifier
-            .detect(
+            sensitivity = 1
 
-                db=db,
+        elif security_level == "INTERNAL":
 
+            sensitivity = 2
 
-                content=
+        #
+        # COMBINE -> AI Detect
+        #
 
-                chunk["content"],
+        else:
 
+            sensitivity = await (
 
-                security_level=
+                SensitivityClassifier
+                .detect(
 
-                chunk[
-                    "metadata"
-                ].get(
-                    "security_level"
-                ),
+                    db=db,
 
+                    content=chunk["content"],
 
-                department=
+                    security_level=security_level,
 
-                chunk[
-                    "metadata"
-                ].get(
-                    "department"
+                    department=
+                    chunk["metadata"].get(
+                        "department"
+                    ),
+
                 )
 
             )
-                    )
-
 
         # --------------------------
         # Metadata Enrichment
@@ -65,63 +74,32 @@ class ChunkProcessor:
         result = {
 
             "id":
-
-            chunk.get(
-                "id"
-            ),
-
+            chunk.get("id"),
 
             "department":
+            chunk.get(
+                "metadata",
+                {},
+            ).get(
+                "department",
+            ),
 
-            
-                chunk.get(
-
-                    "metadata",
-
-                    {}
-
-                ).get(
-
-                    "department"
-
-                ),
-
-
-
-        "security_level":
-
-        chunk.get(
-
-            "metadata",
-
-            {}
-
-        ).get(
-
-            "security_level"
-
-        ),
-
+            "security_level":
+            security_level,
 
             "sensitivity":
-
             sensitivity,
 
-
             "processed":
-
             True,
 
-
             "content_preview":
-
             chunk.get(
                 "content",
-                ""
-            )[:300]
+                "",
+            )[:300],
 
         }
-
 
         # --------------------------
         # Review File
@@ -133,11 +111,9 @@ class ChunkProcessor:
 
             "a",
 
-            encoding=
-            "utf-8"
+            encoding="utf-8",
 
         ) as f:
-
 
             json.dump(
 
@@ -145,14 +121,10 @@ class ChunkProcessor:
 
                 f,
 
-                ensure_ascii=False
+                ensure_ascii=False,
 
             )
 
-
-            f.write(
-                "\n"
-            )
-
+            f.write("\n")
 
         return result

@@ -24,6 +24,7 @@ from app.services.prompt.prompt_builder_azure import (
 from app.utils.extract.document_extraction import (
     DocumentExtractor,
 )
+from app.repositories.rag_config_repository import WorkspaceConfigRepository
 
 
 class ReviewAIService:
@@ -88,6 +89,29 @@ class ReviewAIService:
         print("=" * 80)
 
         ai = AzureOpenAIService()
+        
+        workspace_code = PromptCode.REVIEW_CV.value
+                        
+        model_config = await (
+                    WorkspaceConfigRepository
+                    .get_model_config_by_workspace_code(
+                
+                                db=db,
+                
+                                workspace_code=
+                                workspace_code,
+                
+                            )
+                        )
+                        
+        temperature = float(
+                model_config.temperature
+            )
+        
+        max_tokens = int(
+                model_config.max_tokens
+            )
+        
 
         result = await ai.chat(
             model=model.model_name,
@@ -97,6 +121,8 @@ class ReviewAIService:
                     "content": built_prompt,
                 },
             ],
+            temperature=temperature,
+            max_completion_tokens=max_tokens
         )
 
         try:

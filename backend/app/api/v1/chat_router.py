@@ -81,6 +81,8 @@ from app.enums.prompt_code import ( PromptCode
 
 import json
 
+from app.repositories.rag_config_repository import WorkspaceConfigRepository
+
 router = APIRouter(
 
     prefix=
@@ -245,6 +247,8 @@ async def query(
   RagService()
 
  )
+ 
+ workscpace_code = PromptCode.CHAT_RAG.value
 
 
  answer = await (
@@ -264,6 +268,8 @@ async def query(
     model_id=body.model_id,
     
     mode=body.mode,
+    
+    woerkspace_code=workscpace_code,
 
   )
 
@@ -351,3 +357,246 @@ async def query(
 }
  
  
+@router.post("/helpdesk/chat")
+async def helpdesk_query(
+
+    body: ChatRequest,
+
+    db: AsyncSession = Depends(
+        get_db,
+    ),
+
+):
+
+    role_name = await (
+        RoleRepository.get_by_id(
+            db=db,
+            role_id=body.role_id,
+        )
+    )
+
+    if role_name is None:
+
+        raise NotFoundException(
+            "Role not found."
+        )
+
+    if body.conversation_id is None:
+
+        body.conversation_id = uuid4()
+
+    conversation = await (
+        ConversationRepository.get_by_id(
+            db=db,
+            conversation_id=body.conversation_id,
+        )
+    )
+
+    if conversation is None:
+
+        await ConversationService.create(
+            db=db,
+            conversation_id=body.conversation_id,
+            title=body.question,
+            email=None,
+        )
+
+    history = await (
+        SessionMemoryService
+        .build_context(
+            db=db,
+            conversation_id=body.conversation_id,
+        )
+    )
+
+    retrieval_query = await (
+        QueryRewriteService
+        .rewrite(
+            history=history,
+            question=body.question,
+        )
+    )
+
+    print(
+        "rewritten query =",
+        retrieval_query,
+    )
+
+    # ======================================
+    # HELPDESK RETRIEVAL
+    # ======================================
+    
+    top_k = await (
+    WorkspaceConfigRepository
+    .get_top_k_by_workspace_code(
+
+        db=db,
+
+        workspace_code=
+        PromptCode.HELPDESK.value,
+
+    )
+)
+
+    chunks = []
+
+    if body.mode != PromptCode.PUBLIC:
+
+        chunks = AzureSearchService.retrieve_helpdesk(
+            question=retrieval_query,
+            top_k=top_k,
+        )
+
+    # ======================================
+    # SAVE USER
+    # ======================================
+
+    await (
+
+        MessageService
+        .create(
+
+            db,
+
+            {
+
+                "conversation_id":
+                body.conversation_id,
+
+                "role":
+                "user",
+
+                "content":
+                body.question,
+
+            }
+
+        )
+
+    )
+
+    rag_service = RagService()
+    
+    
+    workscpace_code = PromptCode.HELPDESK.value
+
+    answer = await (
+
+        rag_service.ask(
+
+            db=db,
+
+            conversation_id=
+            body.conversation_id,
+
+            question=
+            body.question,
+
+            chunks=
+            chunks,
+
+            model_id=
+            body.model_id,
+
+            mode=
+            body.mode,
+            
+            workspace_code=
+            workscpace_code,
+
+        )
+
+    )
+
+    # ======================================
+    # BUILD SOURCES
+    # ======================================
+
+    if body.mode == PromptCode.PUBLIC:
+
+        result = json.loads(
+            answer
+        )
+
+        answer = result["answer"]
+
+        sources = result["sources"]
+
+    else:
+
+        source_map = {}
+
+        for chunk in chunks:
+
+            file = chunk["source_file"]
+
+            if file not in source_map:
+
+                source_map[file] = {
+
+                    "source_file":
+                    file,
+
+                    "excerpt":
+                    chunk["content"],
+
+                    "type":
+                    "internal",
+
+                }
+
+        sources = list(
+            source_map.values()
+        )
+
+    # ======================================
+    # SAVE ASSISTANT
+    # ======================================
+
+    await (
+
+        MessageService
+        .create(
+
+            db,
+
+            {
+
+                "conversation_id":
+                body.conversation_id,
+
+                "role":
+                "assistant",
+
+                "content":
+                answer,
+
+            }
+
+        )
+
+    )
+
+    # await (
+    #     ConversationSummaryService
+    #     .update_summary(
+    #         db=db,
+    #         conversation_id=body.conversation_id,
+    #     )
+    # )
+
+    return {
+
+        "conversation_id":
+        str(body.conversation_id),
+
+        "title":
+        body.question,
+
+        "answer":
+        answer,
+
+        "sources":
+        sources,
+
+    }

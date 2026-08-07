@@ -16,6 +16,7 @@ from app.services.llm.azure_openai_service import (
     AzureOpenAIService,
 )
 from app.core.settings import settings
+from app.repositories.rag_config_repository import WorkspaceConfigRepository
 
 
 class ProjectTrackingAIService:
@@ -125,6 +126,31 @@ class ProjectTrackingAIService:
         print("=" * 100)
         print("PROJECT AI ANALYSIS")
         print("=" * 100)
+        
+        
+        workspace_code = PromptCode.PROJECT_TRACKING.value
+                                
+        model_config = await (
+            WorkspaceConfigRepository
+            .get_model_config_by_workspace_code(
+                        
+                db=db,
+                        
+                workspace_code=
+                workspace_code,
+                        
+                                    )
+                                )
+                                
+        temperature = float(
+                model_config.temperature
+            )
+        
+        max_tokens = int(
+                model_config.max_tokens
+            )
+        
+        
 
         answer = await (
 
@@ -134,7 +160,8 @@ class ProjectTrackingAIService:
 
                 messages=messages,
 
-                temperature=0.2,
+                temperature=temperature,
+                max_completion_tokens=max_tokens
 
             )
 

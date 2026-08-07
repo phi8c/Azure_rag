@@ -39,6 +39,7 @@ from app.enums.prompt_code import PromptCode
 from app.repositories.ai_model_repository import AIModelRepository
 from app.repositories.ai_prompt_repository import AIPromptRepository
 from app.services.llm.azure_openai_service import AzureOpenAIService
+from app.repositories.rag_config_repository import WorkspaceConfigRepository
 
 class ExecutiveDataSyncService:
 
@@ -554,6 +555,28 @@ class ExecutiveDataSyncService:
         #
         # Chat
         #
+        workspace_code = PromptCode.EXECUTIVE_DATA.value
+                        
+        model_config = await (
+            WorkspaceConfigRepository
+                    .get_model_config_by_workspace_code(
+                
+                                db=db,
+                
+                                workspace_code=
+                                workspace_code,
+                
+                            )
+                        )
+                        
+        temperature = float(
+                model_config.temperature
+            )
+        
+        max_tokens = int(
+                model_config.max_tokens
+            )
+        
 
         answer = await (
 
@@ -565,7 +588,8 @@ class ExecutiveDataSyncService:
 
                 messages=messages,
 
-                temperature=0.2,
+                temperature=temperature,
+                max_completion_tokens=max_tokens
 
             )
 

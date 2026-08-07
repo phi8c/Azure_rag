@@ -27,6 +27,7 @@ from uuid import UUID
 
 from app.repositories.ai_model_repository import ( AIModelRepository)
 from app.core.settings import settings
+from app.repositories.rag_config_repository import WorkspaceConfigRepository
 
 
 class TrackingTaskService:
@@ -336,13 +337,37 @@ Dữ liệu dự án:
         #
         # Chat
         #
+        
+        
+        workspace_code = PromptCode.PROJECT_TRACKING.value
+                                
+        model_config = await (
+                            WorkspaceConfigRepository
+                            .get_model_config_by_workspace_code(
+                        
+                                        db=db,
+                        
+                                        workspace_code=
+                                        workspace_code,
+                        
+                                    )
+                                )
+                                
+        temperature = float(
+                model_config.temperature
+            )
+        
+        max_tokens = int(
+                model_config.max_tokens
+            )
 
         answer = await (
     AzureOpenAIService()
     .chat(
         model=model.model_name,
         messages=messages,
-        temperature=0.2,
+        temperature=temperature,
+        max_completion_tokens=max_tokens
     )
     
 )

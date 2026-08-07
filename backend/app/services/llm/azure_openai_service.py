@@ -20,6 +20,7 @@ class AzureOpenAIService:
         model: str,
         messages: list[dict[str, Any]],
         temperature: float = 0.2,
+        max_completion_tokens: int = 2000,
     ) -> str:
         
         
@@ -29,6 +30,7 @@ class AzureOpenAIService:
             model=model,
             messages=messages,
             temperature=temperature,
+            max_completion_tokens=max_completion_tokens
         )
 
         return (

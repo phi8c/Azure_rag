@@ -21,6 +21,8 @@ from app.services.llm.azure_openai_service import (
 )
 from uuid import UUID
 
+from app.repositories.rag_config_repository import WorkspaceConfigRepository
+
 
 class ExecutiveDataAIService:
 
@@ -137,6 +139,28 @@ class ExecutiveDataAIService:
         # ======================================
         # Generate
         # ======================================
+        
+        workspace_code = PromptCode.EXECUTIVE_DATA.value
+                
+        model_config = await (
+            WorkspaceConfigRepository
+            .get_model_config_by_workspace_code(
+        
+                        db=db,
+        
+                        workspace_code=
+                        workspace_code,
+        
+                    )
+                )
+                
+        temperature = float(
+                model_config.temperature
+            )
+        
+        max_tokens = int(
+                model_config.max_tokens
+            )
 
         print("=" * 100)
         print("EXECUTIVE DATA AI ANALYSIS")
@@ -150,7 +174,8 @@ class ExecutiveDataAIService:
 
                 messages=messages,
 
-                temperature=0.2,
+                temperature=temperature,
+                max_completion_tokens=max_tokens
 
             )
 
