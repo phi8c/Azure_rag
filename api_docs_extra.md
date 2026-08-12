@@ -453,7 +453,7 @@ body:
 SỬA Module Chat HELPDESK/IT
 
 thay API cũ bằng API dưới đây
-POST: https://ai.sadec.co/api/chat/helpdesk/chat
+POST: https://ai.sadec.co/api/chat/helpdesk
 
 {
   "conversation_id": "1af91f54-0c95-4021-bb18-a42b5aa65871",

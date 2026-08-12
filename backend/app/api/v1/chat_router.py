@@ -269,7 +269,7 @@ async def query(
     
     mode=body.mode,
     
-    woerkspace_code=workscpace_code,
+    workspace_code=workscpace_code,
 
   )
 
@@ -357,7 +357,7 @@ async def query(
 }
  
  
-@router.post("/helpdesk/chat")
+@router.post("/helpdesk")
 async def helpdesk_query(
 
     body: ChatRequest,
