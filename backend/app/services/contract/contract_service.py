@@ -136,8 +136,13 @@ Nội dung hợp đồng:
             )
         )
         
-        temperature = model_config.temperature
-        max_tokens = model_config.max_tokens
+        temperature = float(
+    model_config.temperature
+)
+
+        max_tokens = int(
+    model_config.max_tokens
+)
         
         
         result =  await self.llm.chat(
