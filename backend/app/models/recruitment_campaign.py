@@ -17,6 +17,10 @@ from sqlalchemy.orm import (
     mapped_column
 )
 
+from sqlalchemy.dialects.postgresql import JSONB
+
+from pgvector.sqlalchemy import Vector
+
 from app.core.database import Base
 
 
@@ -35,6 +39,8 @@ class RecruitmentCampaign(Base):
         ForeignKey("roles.id"),
         nullable=False
     )
+    
+    
 
     title: Mapped[str] = mapped_column(
         String(255),
@@ -51,6 +57,19 @@ class RecruitmentCampaign(Base):
         nullable=False,
         default="draft"
     )
+    
+    cv_embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(1536),
+        nullable=True,
+    )
+    
+    cv_data: Mapped[dict] = mapped_column(
+    JSONB,
+    nullable=False,
+    default=lambda: {
+        "candidates": []
+    }
+)
 
     created_by: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),

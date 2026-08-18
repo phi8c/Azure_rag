@@ -9,8 +9,7 @@ from fastapi import UploadFile
 class CreateReviewRequest:
 
     model_id: UUID
-    
-    
-    job_description: str
 
     files: list[UploadFile]
+    
+    campaign_id: UUID

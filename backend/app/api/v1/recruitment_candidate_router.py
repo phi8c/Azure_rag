@@ -23,12 +23,25 @@ from app.core.database import (
 
 from app.schemas.recruitment_schema import (
     RecruitmentCampaignCreate,
-    RecruitmentCampaignResponse
+    RecruitmentCampaignResponse,
+    
+)
+
+from app.schemas.recruit_campaign_chat_request import (
+
+RecruitmentCampaignChatRequest
+
 )
 
 from app.services.recruitment.recruitment_service import (
     RecruitmentService
 )
+
+
+from app.services.recruitment.recruitment_campaign_service import (
+    RecruitmentCampaignService
+)
+
 
 from app.services.recruitment.upload_candidate import (
     UploadCandidateService,
@@ -115,8 +128,8 @@ from app.schemas.review_dto import (
 )
 async def create_review(
     model_id: UUID = Form(...),
-    job_description: str = Form(...),
     files: list[UploadFile] = File(...),
+    campaign_id: UUID = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
     
@@ -125,8 +138,8 @@ async def create_review(
 
     request = CreateReviewRequest(
         model_id=model_id,
-        job_description=job_description,
         files=files,
+        campaign_id=campaign_id,
     )
     
     if len(request.files) == settings.MIN:
@@ -147,6 +160,87 @@ async def create_review(
         db=db,
         request=request,
     )
+    
+    
+@router.post("/campaign/chat")
+async def campaign_chat(
+    body: RecruitmentCampaignChatRequest,
+    db: AsyncSession = Depends(get_db),
+):
+
+    answer = await (
+        RecruitmentService
+        .chat(
+            db=db,
+            campaign_id=body.campaign_id,
+            model_id=body.model_id,
+            question=body.question,
+        )
+    )
+
+    return {
+
+        "campaign_id":
+        str(body.campaign_id),
+
+        "answer":
+        answer,
+
+    }
+    
+@router.get("/list-campaign")
+async def get_campaigns(
+    db: AsyncSession = Depends(
+        get_db,
+    ),
+):
+
+    return await (
+        RecruitmentCampaignService
+        .get_list(
+            db=db,
+        )
+    )
+@router.get("/{campaign_id}")
+async def get_campaign_detail(
+    campaign_id: UUID,
+
+    db: AsyncSession = Depends(
+        get_db,
+    ),
+):
+
+    return await (
+        RecruitmentCampaignService
+        .get_detail(
+            db=db,
+            campaign_id=campaign_id,
+        )
+    )
+    
+@router.get(
+    "/{campaign_id}/candidates/{task_id}"
+)
+async def get_candidate_detail(
+    campaign_id: UUID,
+    task_id: UUID,
+
+    db: AsyncSession = Depends(
+        get_db,
+    ),
+):
+
+    return await (
+        RecruitmentCampaignService
+        .get_candidate_detail(
+            db=db,
+            campaign_id=campaign_id,
+            task_id=task_id,
+        )
+    )
+
+    
+
 
 
 # @router.get(

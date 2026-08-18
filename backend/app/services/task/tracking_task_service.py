@@ -197,7 +197,7 @@ class TrackingTaskService:
         #
 
         projects = await (
-            ProjectTrackingRawRepository
+            ProjectTrackingRawRepository3
             .get_project_names(
                 db=db,
             )

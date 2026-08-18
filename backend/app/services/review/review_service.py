@@ -57,6 +57,8 @@ from datetime import (
 )
 
 
+
+
 class ReviewService:
 
     @staticmethod
@@ -88,10 +90,11 @@ class ReviewService:
         # =====================================
 
         review_job = ReviewJob(
+            
+            
+            campaign_id=request.campaign_id,
 
             model_id=model.id,
-
-            job_description=request.job_description,
 
             status=ReviewJobStatus.QUEUED,
 
@@ -208,13 +211,18 @@ class ReviewService:
                     ReviewAIService.execute(
                         db=db,
                         model_id=review_job.model_id,
-                        job_description=review_job.job_description,
+                        campaign_id=review_job.campaign_id,
+                        
                         file_path=review_task.file_path,
                     )
                 )
 
                 review_task.review_result = result
-
+                
+                
+                review_task.file_name = (
+                    result.get("candidate_name")
+                )
                 review_task.status = (
                     ReviewTaskStatus.COMPLETED
                 )
@@ -290,6 +298,15 @@ class ReviewService:
         )
 
         await db.commit()
+        
+        await db.refresh(
+    review_task
+)
+        
+        print(
+    "DB FILE NAME:",
+    review_task.file_name
+)
 
         # =====================================
         # Response

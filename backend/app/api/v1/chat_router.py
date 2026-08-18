@@ -296,6 +296,9 @@ async def query(
             source_map[file] = {
 
                 "source_file": file,
+                
+                
+                "source_url": chunk["source_url"],
 
                 "excerpt": chunk["content"],
 
@@ -339,13 +342,13 @@ async def query(
 
  )
  
- await (
-    ConversationSummaryService
-    .update_summary(
-        db=db,
-        conversation_id=body.conversation_id
-    )
-)
+#  await (
+#     ConversationSummaryService
+#     .update_summary(
+#         db=db,
+#         conversation_id=body.conversation_id
+#     )
+# )
 
 
  return {
@@ -536,6 +539,8 @@ async def helpdesk_query(
 
                     "source_file":
                     file,
+                    
+                    "source_url": chunk["source_url"],
 
                     "excerpt":
                     chunk["content"],

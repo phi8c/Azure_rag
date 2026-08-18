@@ -214,6 +214,7 @@ class AzureSearchService:
             "document_type": doc.get("document_type"),
 
             "sensitivity": doc.get("sensitivity"),
+            "source_url": doc.get("source_url"),
             
             
         }
@@ -367,6 +368,8 @@ class AzureSearchService:
 
                 "sensitivity":
                 doc.get("sensitivity"),
+                "source_url":
+                doc.get("source_url"),
 
             }
 

@@ -39,6 +39,12 @@ class ReviewJob(Base):
         ForeignKey("ai_models.id"),
         nullable=False,
     )
+    
+    campaign_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("recruitment_campaigns.id"),
+        nullable=False,
+    )
 
     status: Mapped[str] = mapped_column(
         String(30),
@@ -83,3 +89,5 @@ class ReviewJob(Base):
         back_populates="job",
         cascade="all, delete-orphan",
     )
+    
+    

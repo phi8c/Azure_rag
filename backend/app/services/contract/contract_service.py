@@ -140,9 +140,11 @@ Nội dung hợp đồng:
     model_config.temperature
 )
 
-        max_tokens = int(
-    model_config.max_tokens
-)
+#         max_tokens = int(
+#     model_config.max_tokens
+
+# )   
+        max_tokens = 6000
         
         
         result =  await self.llm.chat(
@@ -157,12 +159,17 @@ Nội dung hợp đồng:
         )
         
         
+        print("in ra result", result)
+        
+        
         
         analysis = json.loads(result)
 
         #
         # Save Raw
         #
+        
+        
 
         contract = await (
         ContractService

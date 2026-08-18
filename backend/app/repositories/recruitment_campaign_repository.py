@@ -1,7 +1,8 @@
 from uuid import UUID
 
 from sqlalchemy import (
-    select
+    select,
+    update
 )
 
 from sqlalchemy.ext.asyncio import (
@@ -11,6 +12,18 @@ from sqlalchemy.ext.asyncio import (
 from app.models.recruitment_campaign import (
     RecruitmentCampaign
 )
+
+
+
+
+from app.models.review_job import (
+    ReviewJob,
+)
+
+from app.models.review_task import (
+    ReviewTask,
+)
+
 
 
 class RecruitmentCampaignRepository:
@@ -27,7 +40,9 @@ class RecruitmentCampaignRepository:
             role_id=role_id,
             title=title,
             job_description=job_description,
-            created_by=created_by
+            created_by=created_by,
+            cv_embedding=None,
+            cv_data=None
         )
 
         db.add(item)
@@ -75,3 +90,226 @@ class RecruitmentCampaignRepository:
             query
             .scalar_one_or_none()
         )
+        
+        
+    @staticmethod
+    async def update_cv_embedding(
+        db: AsyncSession,
+        campaign_id: UUID,
+        cv_embedding: list[float],
+    ):
+
+        query = await db.execute(
+
+            update(
+                RecruitmentCampaign
+            )
+
+            .where(
+
+                RecruitmentCampaign.id
+                == campaign_id,
+
+            )
+
+            .values(
+
+                cv_embedding=
+                cv_embedding,
+
+            )
+
+            .returning(
+                RecruitmentCampaign
+            )
+
+        )
+
+        item = (
+            query
+            .scalar_one_or_none()
+        )
+
+        if item is not None:
+
+            await db.commit()
+
+        return item
+    
+    
+    @staticmethod
+    async def update_cv_data(
+        db: AsyncSession,
+        campaign_id: UUID,
+        cv: dict,
+    ):
+
+        query = await db.execute(
+
+            select(
+                RecruitmentCampaign
+            )
+
+            .where(
+                RecruitmentCampaign.id
+                == campaign_id
+            )
+
+        )
+
+        campaign = (
+            query
+            .scalar_one_or_none()
+        )
+
+        if campaign is None:
+
+            return None
+
+        current_data = (
+            campaign.cv_data
+            or {
+                "candidates": []
+            }
+        )
+
+        candidates = (
+            current_data
+            .get(
+                "candidates",
+                []
+            )
+        )
+
+        candidates.append(
+            cv
+        )
+
+        campaign.cv_data = {
+            "candidates": candidates
+        }
+
+        await db.commit()
+
+        await db.refresh(
+            campaign
+        )
+
+        return campaign
+    
+    async def get_data_cv(
+        
+     db: AsyncSession,
+     campaign_id: UUID
+        
+    ):
+        
+        query = await db.execute(
+                    select(
+                        RecruitmentCampaign.cv_data
+                    )
+                    .where(
+                        RecruitmentCampaign.id == campaign_id
+                    )
+                )
+        
+        return (
+                    query
+                    .scalar_one_or_none()
+                )
+        
+    @staticmethod
+    async def get_all(
+        db: AsyncSession,
+    ):
+
+        query = await db.execute(
+
+            select(
+                RecruitmentCampaign,
+            )
+
+            .order_by(
+                RecruitmentCampaign.created_at.desc()
+            )
+
+        )
+
+        return (
+            query
+            .scalars()
+            .all()
+        )
+        
+    
+    @staticmethod
+    async def get_candidates(
+        db: AsyncSession,
+        campaign_id: UUID,
+    ):
+
+        query = await db.execute(
+
+            select(
+                ReviewTask,
+            )
+
+            .join(
+                ReviewJob,
+                ReviewJob.id
+                == ReviewTask.job_id,
+            )
+
+            .where(
+                ReviewJob.campaign_id
+                == campaign_id,
+            )
+            .order_by(
+                ReviewTask.created_at.asc()
+            )
+
+        )
+
+        return (
+            query
+            .scalars()
+            .all()
+        )
+        
+    
+    @staticmethod
+    async def get_candidate(
+        db: AsyncSession,
+        campaign_id: UUID,
+        task_id: UUID,
+    ):
+
+        query = await db.execute(
+
+            select(
+                ReviewTask,
+            )
+
+            .join(
+                ReviewJob,
+                ReviewJob.id
+                == ReviewTask.job_id,
+            )
+            
+            .where(
+
+                ReviewJob.campaign_id
+                == campaign_id,
+
+                ReviewTask.id
+                == task_id,
+
+            )
+
+        )
+
+        return (
+            query
+            .scalar_one_or_none()
+        )
+        
