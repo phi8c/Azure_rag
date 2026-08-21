@@ -24,6 +24,7 @@ from app.core.database import (
 from app.schemas.recruitment_schema import (
     RecruitmentCampaignCreate,
     RecruitmentCampaignResponse,
+    RecruitmentCampaignCreateResponse,
     
 )
 
@@ -72,7 +73,7 @@ router = APIRouter(
 
 @router.post(
     "",
-    response_model=RecruitmentCampaignResponse
+    response_model=RecruitmentCampaignCreateResponse
 )
 async def create_campaign(
     payload: RecruitmentCampaignCreate,

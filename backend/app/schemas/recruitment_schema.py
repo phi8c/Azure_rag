@@ -76,6 +76,24 @@ class RecruitmentCampaignResponse(
     candidates: list[
         RecruitmentCandidateResponse
     ]
+    
+class RecruitmentCampaignCreateResponse(
+    BaseModel
+):
+
+    id: UUID
+
+    title: str
+
+    role_id: int
+
+    job_description: str
+
+    status: str
+
+    created_at: datetime
+
+    updated_at: datetime
 
 
 class RecruitmentCandidateDetailResponse(
