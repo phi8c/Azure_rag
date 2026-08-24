@@ -12,4 +12,4 @@ class CreateReviewRequest:
 
     files: list[UploadFile]
     
-    campaign_id: UUID
+    job_description: str

@@ -49,8 +49,6 @@ from app.services.temp.temp_file_service import (
     TempFileService,
 )
 
-from uuid import UUID
-
 from datetime import (
     datetime,
     timezone,
@@ -90,11 +88,9 @@ class ReviewService:
         # =====================================
 
         review_job = ReviewJob(
-            
-            
-            campaign_id=request.campaign_id,
-
             model_id=model.id,
+
+            job_description=request.job_description,
 
             status=ReviewJobStatus.QUEUED,
 
@@ -211,8 +207,7 @@ class ReviewService:
                     ReviewAIService.execute(
                         db=db,
                         model_id=review_job.model_id,
-                        campaign_id=review_job.campaign_id,
-                        
+                        job_description=review_job.job_description,
                         file_path=review_task.file_path,
                     )
                 )
@@ -298,15 +293,6 @@ class ReviewService:
         )
 
         await db.commit()
-        
-        await db.refresh(
-    review_task
-)
-        
-        print(
-    "DB FILE NAME:",
-    review_task.file_name
-)
 
         # =====================================
         # Response

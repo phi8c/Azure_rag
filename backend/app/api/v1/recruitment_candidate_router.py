@@ -57,11 +57,6 @@ from app.schemas.analyze_candidate_request import (
 from app.services.review.review_service import (
     ReviewService,
 )
-
-
-from app.services.review.review_service import (
-    ReviewService,
-)
 from app.core.settings import settings
 from app.core.not_found_exception import NotFoundException
 
@@ -130,7 +125,7 @@ from app.schemas.review_dto import (
 async def create_review(
     model_id: UUID = Form(...),
     files: list[UploadFile] = File(...),
-    campaign_id: UUID = Form(...),
+    job_description: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
     
@@ -140,7 +135,7 @@ async def create_review(
     request = CreateReviewRequest(
         model_id=model_id,
         files=files,
-        campaign_id=campaign_id,
+        job_description=job_description,
     )
     
     if len(request.files) == settings.MIN:

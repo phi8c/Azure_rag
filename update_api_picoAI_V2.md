@@ -60,14 +60,31 @@ POST: https://ai.sadec.co/api/recruitments
 body:
 {
   "role_id": 1,
-  "title": "đợt tuyển dụng kế toán quý 3 2026",
-  "job_description": "Yêu cầu có 5 năm kinh nghiệm"
+  "title": "đợt tuyển dụng kế toán quý 2 2027",
+  "job_description": "Yêu cầu ứng viên có 5 năm kinh nghiệm ở vai trò kế toán"
   
   
 }
+
+response
+{
+  "id": "43d9f5ff-96b0-4980-9fed-b2eab0743e4e",
+  "title": "đợt tuyển dụng kế toán quý 2 2027",
+  "role_id": 1,
+  "job_description": "Yêu cầu ứng viên có 5 năm kinh nghiệm ở vai trò kế toán",
+  "status": "draft",
+  "created_at": "2026-08-21T02:22:01.862942Z",
+  "updated_at": "2026-08-21T02:22:01.862942Z"
+}
+
+
+
 trong body này "role_id": 1 để lấy được role_id lần trước đã cung cấp API để lấy danh sách role
 
 sau khi tạo sẽ có campaign_id: UUID
+
+
+/////////////////////////////////////////////
 
 
 GET: httpS://ai.sadec.co/api/recruitments/list-campaign

@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 import asyncio
 
@@ -124,6 +126,28 @@ app = FastAPI(
     ]
 
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    errors = []
+
+    for error in exc.errors():
+        sanitized_error = dict(error)
+        sanitized_error.pop(
+            "input",
+            None,
+        )
+        errors.append(
+            sanitized_error,
+        )
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": errors,
+        },
+    )
 
 
 # @app.on_event("startup")

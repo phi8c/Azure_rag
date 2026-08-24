@@ -26,17 +26,6 @@ from app.utils.extract.document_extraction import (
 )
 from app.repositories.rag_config_repository import WorkspaceConfigRepository
 
-from app.services.ingestion.ingest_cv import (
-    RecruitmentCVIngestService,
-)
-
-from app.repositories.recruitment_campaign_repository import (
-    RecruitmentCampaignRepository,
-)
-
-
-
-
 class ReviewAIService:
 
     @staticmethod
@@ -44,7 +33,7 @@ class ReviewAIService:
         db: AsyncSession,
         model_id: UUID,
         file_path: str,
-        campaign_id: UUID,
+        job_description: str,
        
         prompt_code: PromptCode = (
             PromptCode.RECRUITMENT_DEFAULT
@@ -82,52 +71,16 @@ class ReviewAIService:
                 file_path,
             )
         )
-        
-        
-        
-       
-        await (
-            RecruitmentCampaignRepository
-            .update_cv_data(
-                db=db,
-                campaign_id=campaign_id,
-                cv={
-                    "file_name": extraction.file_name,
-                    "content": extraction.text,
-                    
-                },
-            )
-        )
-               
-               
-               
-        
-        
 
         print("=" * 80)
         print(extraction.text[:1000])
         print("=" * 80)
-        
-        
-        campaign = await (
-    RecruitmentCampaignRepository
-    .get_by_id(
-        db=db,
-        id=campaign_id,
-    )
-)
-
-        if campaign is None:
-
-            raise NotFoundException(
-            "Recruitment campaign not found.",
-        )
 
         built_prompt = (
             PromptBuilderAzure.build(
                 prompt=prompt.system_prompt,
                 cv_text=extraction.text,
-                job_description=campaign.job_description,
+                job_description=job_description,
                
             )
         )

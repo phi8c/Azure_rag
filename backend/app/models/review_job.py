@@ -7,12 +7,11 @@ from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import String
+from sqlalchemy import Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
-
-from sqlalchemy import Text
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -39,13 +38,6 @@ class ReviewJob(Base):
         ForeignKey("ai_models.id"),
         nullable=False,
     )
-    
-    campaign_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("recruitment_campaigns.id"),
-        nullable=False,
-    )
-
     status: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
@@ -61,10 +53,10 @@ class ReviewJob(Base):
         PG_UUID(as_uuid=True),
         nullable=True,
     )
-    job_description = mapped_column(
-    Text,
-    nullable=False,
-)
+    job_description: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
