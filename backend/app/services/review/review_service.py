@@ -203,7 +203,7 @@ class ReviewService:
 
                 await db.commit()
 
-                result = await (
+                ai_result = await (
                     ReviewAIService.execute(
                         db=db,
                         model_id=review_job.model_id,
@@ -211,6 +211,10 @@ class ReviewService:
                         file_path=review_task.file_path,
                     )
                 )
+
+                result = ai_result.review_result
+
+                extraction = ai_result.extraction
 
                 review_task.review_result = result
                 
@@ -250,6 +254,8 @@ class ReviewService:
 
                 result = None
 
+                extraction = None
+
             results.append(
 
                 ReviewFileResponse(
@@ -261,6 +267,8 @@ class ReviewService:
                     status=review_task.status,
 
                     review_result=result,
+
+                    extraction=extraction,
 
                 )
 

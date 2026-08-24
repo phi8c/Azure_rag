@@ -7,8 +7,11 @@ class RecruitmentCampaignChatRequest(
     BaseModel
 ):
 
-    campaign_id: UUID
+   
 
     model_id: UUID
 
     question: str
+    
+    data_cv: str
+    job_descrition:str

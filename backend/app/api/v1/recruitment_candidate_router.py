@@ -160,24 +160,27 @@ async def create_review(
     
 @router.post("/campaign/chat")
 async def campaign_chat(
-    body: RecruitmentCampaignChatRequest,
+    model_id: str = Form(...),
+    question: str = Form(...),
+    data_cv: str = Form(...),
+    job_description: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
 
     answer = await (
         RecruitmentService
         .chat(
-            db=db,
-            campaign_id=body.campaign_id,
-            model_id=body.model_id,
-            question=body.question,
+           db=db,
+        model_id=model_id,
+        question=question,
+        data_cv=data_cv,
+        job_description=job_description,
         )
     )
 
     return {
 
-        "campaign_id":
-        str(body.campaign_id),
+        
 
         "answer":
         answer,

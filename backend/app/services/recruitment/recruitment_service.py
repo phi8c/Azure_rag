@@ -62,28 +62,29 @@ class RecruitmentService:
     @staticmethod
     async def chat(
         db: AsyncSession,
-        campaign_id: UUID,
         model_id: UUID,
         question: str,
+        data_cv: str,
+        job_description: str,
     ) -> str:
 
         # ======================================
         # Campaign
         # ======================================
 
-        campaign = await (
-            RecruitmentCampaignRepository
-            .get_by_id(
-                db=db,
-                id=campaign_id,
-            )
-        )
+        # campaign = await (
+        #     RecruitmentCampaignRepository
+        #     .get_by_id(
+        #         db=db,
+        #         id=campaign_id,
+        #     )
+        # )
 
-        if campaign is None:
+        # if campaign is None:
 
-            raise NotFoundException(
-                "Recruitment campaign not found.",
-            )
+        #     raise NotFoundException(
+        #         "Recruitment campaign not found.",
+        #     )
 
         # ======================================
         # Model
@@ -107,45 +108,45 @@ class RecruitmentService:
         # Build CV Context
         # ======================================
 
-        cv_data = (
-            campaign.cv_data
-            or {
-                "candidates": []
-            }
-        )
+        # cv_data = (
+        #     campaign.cv_data
+        #     or {
+        #         "candidates": []
+        #     }
+        # )
 
-        candidates = (
-            cv_data
-            .get(
-                "candidates",
-                []
-            )
-        )
+        # candidates = (
+        #     cv_data
+        #     .get(
+        #         "candidates",
+        #         []
+        #     )
+        # )
 
-        contexts = []
+        # contexts = []
 
-        for index, candidate in enumerate(
-            candidates,
-            start=1,
-        ):
+        # for index, candidate in enumerate(
+        #     candidates,
+        #     start=1,
+        # ):
 
-            contexts.append(
+#             contexts.append(
 
-                f"""
-Ứng viên {index}
+#                 f"""
+# Ứng viên {index}
 
-File:
-{candidate.get("file_name", "")}
+# File:
+# {candidate.get("file_name", "")}
 
-Nội dung CV:
-{candidate.get("content", "")}
-"""
+# Nội dung CV:
+# {candidate.get("content", "")}
+# """
 
-            )
+#             )
 
-        context = "\n\n".join(
-            contexts
-        )
+        # context = "\n\n".join(
+        #     contexts
+        # )
 
         # ======================================
         # Prompt
@@ -160,15 +161,14 @@ Nội dung CV:
 Bạn đang hỗ trợ người dùng phân tích
 một đợt tuyển dụng.
 
-Tên đợt tuyển dụng:
-{campaign.title}
+
 
 Mô tả công việc:
-{campaign.job_description}
+{job_description}
 
 Danh sách CV trong đợt tuyển dụng:
 
-{context}
+{data_cv}
 
 Chỉ sử dụng thông tin được cung cấp
 trong context để trả lời.

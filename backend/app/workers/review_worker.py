@@ -42,14 +42,14 @@ async def process_review_task(message: ReviewTaskMessage) -> None:
 
             await db.commit()
 
-            result = await ReviewAIService.execute(
+            ai_result = await ReviewAIService.execute(
                 db=db,
                 model_id=review_job.model_id,
                 job_description=review_job.job_description,
                 file_path=review_task.file_path,
             )
 
-            review_task.review_result = result
+            review_task.review_result = ai_result.review_result
             review_task.status = ReviewTaskStatus.COMPLETED
             review_task.completed_at = datetime.now(timezone.utc)
 

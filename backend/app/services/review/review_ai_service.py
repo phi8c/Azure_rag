@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +27,25 @@ from app.utils.extract.document_extraction import (
 )
 from app.repositories.rag_config_repository import WorkspaceConfigRepository
 
+
+@dataclass(slots=True)
+class ReviewAIResult:
+
+    review_result: dict
+
+    extraction: dict[str, str]
+
+
 class ReviewAIService:
+
+    @staticmethod
+    def _build_extraction_response(
+        extraction,
+    ) -> dict[str, str]:
+
+        return {
+            "text": extraction.text,
+        }
 
     @staticmethod
     async def execute(
@@ -38,7 +57,7 @@ class ReviewAIService:
         prompt_code: PromptCode = (
             PromptCode.RECRUITMENT_DEFAULT
         ),
-    ) -> dict:
+    ) -> ReviewAIResult:
 
         prompt = await (
             AIPromptRepository.get_by_code(
@@ -84,6 +103,8 @@ class ReviewAIService:
                
             )
         )
+        
+        
 
         print("=" * 80)
         print(built_prompt)
@@ -128,8 +149,13 @@ class ReviewAIService:
 
         try:
 
-            return json.loads(
-                result,
+            return ReviewAIResult(
+                review_result=json.loads(
+                    result,
+                ),
+                extraction=ReviewAIService._build_extraction_response(
+                    extraction,
+                ),
             )
 
         except json.JSONDecodeError as ex:

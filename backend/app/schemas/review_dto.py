@@ -14,6 +14,8 @@ class ReviewFileResponse(BaseModel):
 
     review_result: Any | None
 
+    extraction: Any | None = None
+
 
 class ReviewResponse(BaseModel):
 
