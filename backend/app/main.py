@@ -99,6 +99,9 @@ from app.workers.executive_data_worker import ExecutiveDataWorker
 
 
 app = FastAPI(
+    
+    
+    root_path="/api",
 
     title=
     "chatrag",
