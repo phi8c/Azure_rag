@@ -197,7 +197,7 @@ async def query(
  chunks = []
  if body.mode != PromptCode.PUBLIC:
 
-    chunks = AzureSearchService.retrieve(
+    chunks = await AzureSearchService.retrieve(
         question=body.question,
         permissions=permissions,
     )

@@ -22,10 +22,19 @@ from app.services.llm.azure_openai_service import (
 from app.services.prompt.prompt_builder_azure import (
     PromptBuilderAzure,
 )
-from app.utils.extract.document_extraction import (
+# from app.utils.extract.document_extraction import (
+#     DocumentExtractor,
+# )
+
+from app.utils.extract.document_intelligent import (
     DocumentExtractor,
 )
+
+
+
 from app.repositories.rag_config_repository import WorkspaceConfigRepository
+
+
 
 
 @dataclass(slots=True)

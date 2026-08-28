@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     PROJECT_TRACKING_MODEL_ID: UUID 
     
     EXECUTIVE_DATA_MODEL_ID: UUID
+    
+    
+    
+    AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT: str
+    AZURE_DOCUMENT_INTELLIGENCE_KEY: str
 
 
     model_config = SettingsConfigDict(
