@@ -5,6 +5,7 @@ from fastapi import (
     Depends
 
 )
+from fastapi.responses import StreamingResponse
 
 from sqlalchemy.ext.asyncio import (
 
@@ -92,6 +93,192 @@ router = APIRouter(
     ["Chat"]
 
 )
+
+
+def sse_event(
+    event: str,
+    data,
+) -> str:
+
+    return (
+        f"event: {event}\n"
+        f"data: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
+    )
+
+
+def build_internal_sources(
+    chunks: list,
+) -> list:
+
+    source_map = {}
+
+    for chunk in chunks:
+
+        file = chunk["source_file"]
+
+        if file not in source_map:
+
+            source_map[file] = {
+                "source_file": file,
+                "source_url": chunk["source_url"],
+                "excerpt": chunk["content"],
+                "type": "internal",
+            }
+
+    return list(source_map.values())
+
+
+class PublicAnswerStreamParser:
+
+    def __init__(self):
+
+        self._buffer = ""
+        self._position = 0
+        self._started = False
+        self._finished = False
+        self._escaped = False
+        self._unicode_escape = ""
+
+    def feed(
+        self,
+        token: str,
+    ) -> str:
+
+        self._buffer += token
+        delta = []
+
+        while self._position < len(self._buffer):
+
+            char = self._buffer[self._position]
+
+            if not self._started:
+
+                key_position = self._buffer.find(
+                    '"answer"',
+                    self._position,
+                )
+
+                if key_position < 0:
+                    self._position = max(
+                        0,
+                        len(self._buffer) - len('"answer"'),
+                    )
+                    break
+
+                colon_position = self._buffer.find(
+                    ":",
+                    key_position + len('"answer"'),
+                )
+
+                if colon_position < 0:
+                    self._position = key_position
+                    break
+
+                quote_position = self._buffer.find(
+                    '"',
+                    colon_position + 1,
+                )
+
+                if quote_position < 0:
+                    self._position = key_position
+                    break
+
+                self._position = quote_position + 1
+                self._started = True
+                continue
+
+            if self._finished:
+                break
+
+            if self._unicode_escape:
+
+                needed = 4 - len(self._unicode_escape)
+                self._unicode_escape += self._buffer[
+                    self._position:self._position + needed
+                ]
+                self._position += min(
+                    needed,
+                    len(self._buffer) - self._position,
+                )
+
+                if len(self._unicode_escape) < 4:
+                    break
+
+                delta.append(
+                    chr(
+                        int(
+                            self._unicode_escape,
+                            16,
+                        )
+                    )
+                )
+                self._unicode_escape = ""
+                self._escaped = False
+                continue
+
+            if self._escaped:
+
+                escape_map = {
+                    '"': '"',
+                    "\\": "\\",
+                    "/": "/",
+                    "b": "\b",
+                    "f": "\f",
+                    "n": "\n",
+                    "r": "\r",
+                    "t": "\t",
+                }
+
+                if char == "u":
+                    self._unicode_escape = ""
+                else:
+                    delta.append(
+                        escape_map.get(
+                            char,
+                            char,
+                        )
+                    )
+                    self._escaped = False
+
+                self._position += 1
+                continue
+
+            if char == "\\":
+                self._escaped = True
+                self._position += 1
+                continue
+
+            if char == '"':
+                self._finished = True
+                self._position += 1
+                break
+
+            delta.append(char)
+            self._position += 1
+
+        return "".join(delta)
+
+
+def parse_public_answer(
+    raw_answer: str,
+    streamed_answer: str,
+) -> tuple[str, list]:
+
+    try:
+
+        result = json.loads(raw_answer)
+
+        return (
+            result["answer"],
+            result["sources"],
+        )
+
+    except json.JSONDecodeError:
+
+        return (
+            streamed_answer or raw_answer,
+            [],
+        )
 
 
 from app.services.message.message_service import (
@@ -251,113 +438,107 @@ async def query(
  workscpace_code = PromptCode.CHAT_RAG.value
 
 
- answer = await (
-
-  rag_service.ask(
-    
-   db=db,
-   conversation_id=body.conversation_id,
-
-   question=
-
-   body.question,
-
-   chunks=
-
-   chunks,
-    model_id=body.model_id,
-    
-    mode=body.mode,
-    
-    workspace_code=workscpace_code,
-
-  )
-
+ sources = (
+    None
+    if body.mode == PromptCode.PUBLIC
+    else build_internal_sources(chunks)
  )
- 
- if body.mode == PromptCode.PUBLIC:
 
-    result = json.loads(answer)
+ async def stream_response():
 
-    answer = result["answer"]
+    raw_answer = ""
+    full_answer = ""
+    final_sources = sources
+    public_parser = (
+        PublicAnswerStreamParser()
+        if body.mode == PromptCode.PUBLIC
+        else None
+    )
 
-    sources = result["sources"]
+    yield sse_event(
+        "metadata",
+        {
+            "conversation_id": str(body.conversation_id),
+            "title": str(body.question),
+            "sources": final_sources,
+        },
+    )
 
- else:
+    async for token in rag_service.ask_stream(
+        db=db,
+        conversation_id=body.conversation_id,
+        question=body.question,
+        chunks=chunks,
+        model_id=body.model_id,
+        mode=body.mode,
+        workspace_code=workscpace_code,
+    ):
 
-    source_map = {}
+        raw_answer += token
 
-    for chunk in chunks:
+        answer_delta = token
 
-        file = chunk["source_file"]
+        if public_parser is not None:
 
-        if file not in source_map:
+            answer_delta = public_parser.feed(token)
 
-            source_map[file] = {
+        if answer_delta:
 
-                "source_file": file,
-                
-                
-                "source_url": chunk["source_url"],
+            full_answer += answer_delta
 
-                "excerpt": chunk["content"],
+            yield sse_event(
+                "answer",
+                {
+                    "delta": answer_delta,
+                },
+            )
 
-                "type": "internal"
+    if body.mode == PromptCode.PUBLIC:
 
+        full_answer, final_sources = parse_public_answer(
+            raw_answer=raw_answer,
+            streamed_answer=full_answer,
+        )
+
+        yield sse_event(
+            "metadata",
+            {
+                "conversation_id": str(body.conversation_id),
+                "title": str(body.question),
+                "sources": final_sources,
+            },
+        )
+
+    await (
+        MessageService
+        .create(
+            db,
+            {
+                "conversation_id": body.conversation_id,
+                "role": "assistant",
+                "content": full_answer,
             }
+        )
+    )
 
-    sources = list(source_map.values())
+    yield sse_event(
+        "done",
+        {
+            "conversation_id": str(body.conversation_id),
+            "title": str(body.question),
+            "answer": full_answer,
+            "sources": final_sources,
+        },
+    )
 
- # =============
-
- # SAVE ASSISTANT
-
- # =============
-
- await (
-
-  MessageService
-
-  .create(
-
-   db,
-
-   {
-
-    "conversation_id":
-
-    body.conversation_id,
-
-    "role":
-
-    "assistant",
-
-    "content":
-
-    answer
-
-   }
-
-  )
-
- )
- 
-#  await (
-#     ConversationSummaryService
-#     .update_summary(
-#         db=db,
-#         conversation_id=body.conversation_id
-#     )
-# )
-
-
- return {
-    "conversation_id": str(body.conversation_id),
-    "title": str(body.question),
-    "answer": answer,
-    "sources": sources,
-    
-}
+ return StreamingResponse(
+    stream_response(),
+    media_type="text/event-stream",
+    headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    },
+)
  
  
 @router.post("/helpdesk")
@@ -483,125 +664,104 @@ async def helpdesk_query(
     
     workscpace_code = PromptCode.HELPDESK.value
 
-    answer = await (
-
-        rag_service.ask(
-
-            db=db,
-
-            conversation_id=
-            body.conversation_id,
-
-            question=
-            body.question,
-
-            chunks=
-            chunks,
-
-            model_id=
-            body.model_id,
-
-            mode=
-            body.mode,
-            
-            workspace_code=
-            workscpace_code,
-
-        )
-
+    sources = (
+        None
+        if body.mode == PromptCode.PUBLIC
+        else build_internal_sources(chunks)
     )
 
-    # ======================================
-    # BUILD SOURCES
-    # ======================================
+    async def stream_response():
 
-    if body.mode == PromptCode.PUBLIC:
-
-        result = json.loads(
-            answer
+        raw_answer = ""
+        full_answer = ""
+        final_sources = sources
+        public_parser = (
+            PublicAnswerStreamParser()
+            if body.mode == PromptCode.PUBLIC
+            else None
         )
 
-        answer = result["answer"]
-
-        sources = result["sources"]
-
-    else:
-
-        source_map = {}
-
-        for chunk in chunks:
-
-            file = chunk["source_file"]
-
-            if file not in source_map:
-
-                source_map[file] = {
-
-                    "source_file":
-                    file,
-                    
-                    "source_url": chunk["source_url"],
-
-                    "excerpt":
-                    chunk["content"],
-
-                    "type":
-                    "internal",
-
-                }
-
-        sources = list(
-            source_map.values()
-        )
-
-    # ======================================
-    # SAVE ASSISTANT
-    # ======================================
-
-    await (
-
-        MessageService
-        .create(
-
-            db,
-
+        yield sse_event(
+            "metadata",
             {
-
-                "conversation_id":
-                body.conversation_id,
-
-                "role":
-                "assistant",
-
-                "content":
-                answer,
-
-            }
-
+                "conversation_id": str(body.conversation_id),
+                "title": body.question,
+                "sources": final_sources,
+            },
         )
 
+        async for token in rag_service.ask_stream(
+            db=db,
+            conversation_id=body.conversation_id,
+            question=body.question,
+            chunks=chunks,
+            model_id=body.model_id,
+            mode=body.mode,
+            workspace_code=workscpace_code,
+        ):
+
+            raw_answer += token
+
+            answer_delta = token
+
+            if public_parser is not None:
+
+                answer_delta = public_parser.feed(token)
+
+            if answer_delta:
+
+                full_answer += answer_delta
+
+                yield sse_event(
+                    "answer",
+                    {
+                        "delta": answer_delta,
+                    },
+                )
+
+        if body.mode == PromptCode.PUBLIC:
+
+            full_answer, final_sources = parse_public_answer(
+                raw_answer=raw_answer,
+                streamed_answer=full_answer,
+            )
+
+            yield sse_event(
+                "metadata",
+                {
+                    "conversation_id": str(body.conversation_id),
+                    "title": body.question,
+                    "sources": final_sources,
+                },
+            )
+
+        await (
+            MessageService
+            .create(
+                db,
+                {
+                    "conversation_id": body.conversation_id,
+                    "role": "assistant",
+                    "content": full_answer,
+                }
+            )
+        )
+
+        yield sse_event(
+            "done",
+            {
+                "conversation_id": str(body.conversation_id),
+                "title": body.question,
+                "answer": full_answer,
+                "sources": final_sources,
+            },
+        )
+
+    return StreamingResponse(
+        stream_response(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )
-
-    # await (
-    #     ConversationSummaryService
-    #     .update_summary(
-    #         db=db,
-    #         conversation_id=body.conversation_id,
-    #     )
-    # )
-
-    return {
-
-        "conversation_id":
-        str(body.conversation_id),
-
-        "title":
-        body.question,
-
-        "answer":
-        answer,
-
-        "sources":
-        sources,
-
-    }

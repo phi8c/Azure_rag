@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     
     AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT: str
     AZURE_DOCUMENT_INTELLIGENCE_KEY: str
+    
+    
+    GOOGLE_CUSTOMER_ID: str
+    GOOGLE_CUSTOMER_SECRET: str
+
+
+    GOOGLE_REDIRECT_URI: str
 
 
     model_config = SettingsConfigDict(

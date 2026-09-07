@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, AsyncIterator
 
 from openai import AsyncAzureOpenAI
 
@@ -39,6 +39,39 @@ class AzureOpenAIService:
             .message.content
             or ""
         )
+
+    async def chat_stream(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        temperature: float = 0.2,
+        max_completion_tokens: int = 2000,
+    ) -> AsyncIterator[str]:
+
+        print(messages)
+
+        stream = await self._client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_completion_tokens=max_completion_tokens,
+            stream=True,
+        )
+
+        async for chunk in stream:
+
+            if not chunk.choices:
+                continue
+
+            content = (
+                chunk
+                .choices[0]
+                .delta
+                .content
+            )
+
+            if content:
+                yield content
         
     async def generate(
         self,
