@@ -9,7 +9,10 @@ from fastapi import (
 )
 import asyncio
 from uuid import UUID
-
+from pydantic import BaseModel
+from app.services.azure.preview_document_service import (
+    PreviewDocumentService
+)
 
 from app.services.sharepoint.sharepoint_service import (
     SharePointService
@@ -108,6 +111,40 @@ ROLE_MAPPING = {
     "Chuyên viên"
 
 }
+
+class DocumentPreviewRequest(BaseModel):
+    drive_id: str
+    drive_item_id: str
+    
+    
+@router.post("/preview")
+async def preview_document(
+    payload: DocumentPreviewRequest,
+):
+    try:
+        preview_url = (
+            await PreviewDocumentService
+            .get_document_preview_url(
+                drive_id=payload.drive_id,
+                drive_item_id=payload.drive_item_id,
+            )
+        )
+
+        return {
+            "preview_url": preview_url
+        }
+
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail="Failed to generate document preview",
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
 
 
 @router.post("/upload")

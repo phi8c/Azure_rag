@@ -140,6 +140,8 @@ class AzureSearchService:
             "document_type": doc.get("document_type"),
             "sensitivity": doc.get("sensitivity"),
             "source_url": doc.get("source_url"),
+            "drive_id": doc.get("drive_id"),
+            "drive_item_id": doc.get("drive_item_id"),
         }
         for doc in full_doc_chunks
     ]
@@ -291,6 +293,12 @@ class AzureSearchService:
                 doc.get("sensitivity"),
                 "source_url":
                 doc.get("source_url"),
+
+                "drive_id":
+                doc.get("drive_id"),
+
+                "drive_item_id":
+                doc.get("drive_item_id"),
 
             }
 

@@ -121,6 +121,8 @@ def build_internal_sources(
             source_map[file] = {
                 "source_file": file,
                 "source_url": chunk["source_url"],
+                "drive_id": chunk.get("drive_id"),
+                "drive_item_id": chunk.get("drive_item_id"),
                 "excerpt": chunk["content"],
                 "type": "internal",
             }
