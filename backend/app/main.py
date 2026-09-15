@@ -7,6 +7,9 @@ import asyncio
 from app.workers.sharepoint_delta_worker import (
     sharepoint_delta_worker,
 )
+from app.workers.meeting_analysis_worker import (
+    MeetingAnalysisWorker,
+)
 
 from app.api.v1.role_router import router as role_router
 from app.api.v1.tag_router import router as tag_router
@@ -77,6 +80,10 @@ from app.api.v1.workspace_source_config_router import (
 
 from app.api.v1.rag_config_router import (
     router as rag_config_router,
+)
+
+from app.api.v1.meeting_router import (
+    router as meeting_router,
 )
 
 from fastapi.middleware.cors import (
@@ -184,6 +191,15 @@ app.add_middleware(
 
 
 
+@app.on_event("startup")
+async def startup():
+    asyncio.create_task(
+        MeetingAnalysisWorker.run(),
+    )
+
+
+
+
 # @app.on_event("startup")
 # async def startup():
 
@@ -256,3 +272,4 @@ app.include_router(prompt_router)
 app.include_router(contract_router)
 app.include_router(workspace_source_config_router)
 app.include_router(rag_config_router)
+app.include_router(meeting_router)

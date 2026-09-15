@@ -54,4 +54,6 @@ class PromptCode( Enum):
     
     REVIEW_CV = "REVIEW_CV"
     
+    MEETING_SUMMARY = "MEETING_SUMMARY"
+    
     

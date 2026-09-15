@@ -97,7 +97,8 @@ class Settings(BaseSettings):
 
 
     GOOGLE_REDIRECT_URI: str
-
+    
+    MEETING_SYNC_USER_ID: str
 
     model_config = SettingsConfigDict(
 
