@@ -145,6 +145,77 @@ class AzureSearchService:
         }
         for doc in full_doc_chunks
     ]
+
+    @staticmethod
+    def retrieve_contract_policy(
+        question: str,
+        top_k: int,
+    ):
+
+        if not question.strip():
+            return []
+
+        client = SearchClient(
+            endpoint=settings.AZURE_SEARCH_ENDPOINT,
+            index_name=settings.AZURE_SEARCH_INDEX,
+            credential=AzureKeyCredential(
+                settings.AZURE_SEARCH_KEY
+            ),
+        )
+
+        openai_client = AzureOpenAI(
+            api_key=settings.AZURE_OPENAI_API_KEY,
+            azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
+            api_version=settings.AZURE_OPENAI_API_VERSION,
+        )
+
+        embedding_response = (
+            openai_client
+            .embeddings
+            .create(
+                model=(
+                    settings
+                    .AZURE_OPENAI_EMBEDDING_DEPLOYMENT
+                ),
+                input=question,
+            )
+        )
+
+        vector_query = VectorizedQuery(
+            vector=(
+                embedding_response
+                .data[0]
+                .embedding
+            ),
+            k_nearest_neighbors=top_k,
+            fields="text_vector",
+        )
+
+        results = client.search(
+            search_text=question,
+            vector_queries=[
+                vector_query,
+            ],
+            filter=(
+                "document_type eq 'CONTRACT_POLICY'"
+            ),
+            top=top_k,
+        )
+
+        return [
+            {
+                "score": doc.get("@search.score"),
+                "chunk_id": doc.get("chunk_id"),
+                "parent_id": doc.get("parent_id"),
+                "title": doc.get("title"),
+                "content": doc.get("chunk"),
+                "source_file": doc.get("source_file"),
+                "document_type": doc.get("document_type"),
+                "source_url": doc.get("source_url"),
+            }
+            for doc in results
+        ]
+
     @staticmethod
     def retrieve_helpdesk(
         question: str,
@@ -305,7 +376,3 @@ class AzureSearchService:
             for doc in results
 
         ]
-            
-            
-            
-            

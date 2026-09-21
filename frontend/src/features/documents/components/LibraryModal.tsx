@@ -3,7 +3,6 @@ import { X, Upload, RefreshCw, FileText,  Shield, Tag, CloudUpload, CheckCircle2
 import { useUploadDocument } from "../hooks/useUploadDocument";
 import { useSyncDocuments } from "../hooks/useSyncDocuments";
 import { useUploadOptions } from "../hooks/useUploadOptions";
-import { getSyncStatus } from "../api/document.api";
 import { useMsal } from "@azure/msal-react";
 import SharePointTree from "./SharepointTree";
 
@@ -83,19 +82,23 @@ if (!securityLevel) return setError("Vui lòng chọn lớp bảo mật");
   }
 
   async function handleSync() {
+    if (!selectedLocation) return setError("Vui lòng chọn thư mục hoặc thư viện SharePoint");
+
     try {
       setError(""); setMessage("Đang đồng bộ dữ liệu...");
-      await syncMutation.mutateAsync();
-      
-      const timer = setInterval(async () => {
-        const result = await getSyncStatus();
-        if (result.status === "COMPLETED") {
-          clearInterval(timer);
-          setUploadSuccess(false);
-          setMessage("✅ Đồng bộ hoàn tất");
-          setTimeout(() => setMessage(""), 10000);
-        }
-      }, 3000);
+      const result = await syncMutation.mutateAsync({
+        siteId: selectedLocation.siteId,
+        driveId: selectedLocation.driveId,
+        folderId: selectedLocation.folderId,
+      });
+
+      setUploadSuccess(false);
+      setMessage(
+        result.changed
+          ? "✅ Đã phát hiện thay đổi và chạy đồng bộ"
+          : "Không có thay đổi mới để đồng bộ"
+      );
+      setTimeout(() => setMessage(""), 10000);
     } catch (err) {
       console.error(err);
       setError("Đồng bộ thất bại");

@@ -36,3 +36,4 @@ typing_extensions==4.15.0
 uvicorn==0.46.0
 azure-core==2.4.0
 azure-search-documents==11.6.0
+duckdb==1.4.4

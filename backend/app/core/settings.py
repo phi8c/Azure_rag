@@ -90,6 +90,8 @@ class Settings(BaseSettings):
     
     AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT: str
     AZURE_DOCUMENT_INTELLIGENCE_KEY: str
+
+    LEGAL_DB_PATH: str = "./data/legal_vbpl.duckdb"
     
     
     GOOGLE_CUSTOMER_ID: str

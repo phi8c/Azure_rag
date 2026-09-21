@@ -17,12 +17,36 @@ from app.core.database import (
 from app.services.meeting.meeting_service import (
     MeetingService,
 )
+from app.schemas.analyze_meeting_request import (
+    AnalyzeMeetingRequest,
+)
+from app.services.azure.meeting_analysis_service import (
+    MeetingAnalysisService,
+)
 
 
 router = APIRouter(
     prefix="/meeting",
     tags=["Meeting"],
 )
+
+
+@router.post("/analyze")
+async def analyze_meeting(
+    request: AnalyzeMeetingRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await MeetingAnalysisService.analyze(
+            db=db,
+            transcript=request.transcript,
+            model_id=request.model_id,
+        )
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("")

@@ -18,6 +18,12 @@ type UploadRequest = {
 
 };
 
+type SyncDocumentsRequest = {
+  siteId: string;
+  driveId: string;
+  folderId?: string;
+};
+
 export async function uploadDocument(
 
   body: UploadRequest
@@ -91,11 +97,18 @@ if (body.folderId) {
 
 }
 
-export async function syncDocuments() {
+export async function syncDocuments(
+  body: SyncDocumentsRequest
+) {
 
   const res =
   await api.post(
-    "/documents/sync"
+    "/documents/delta/check",
+    {
+      site_id: body.siteId,
+      drive_id: body.driveId,
+      folder_id: body.folderId,
+    }
   );
 
   return res.data;

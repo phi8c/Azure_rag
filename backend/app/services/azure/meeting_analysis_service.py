@@ -3,6 +3,7 @@
 import json
 import re
 from datetime import datetime, timezone
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -563,7 +564,7 @@ class MeetingAnalysisService:
 
         result = await (
             MeetingAnalysisService
-            ._analyze(
+            .analyze(
                 db=db,
                 transcript=content,
             )
@@ -727,9 +728,10 @@ class MeetingAnalysisService:
         )
 
     @staticmethod
-    async def _analyze(
+    async def analyze(
         db: AsyncSession,
         transcript: str,
+        model_id: UUID | None = None,
     ) -> dict:
 
         prompt = await (
@@ -750,23 +752,31 @@ class MeetingAnalysisService:
             AIModelRepository
             .get_by_id(
                 db=db,
-                id=settings.EXECUTIVE_DATA_MODEL_ID,
+                id=model_id or settings.EXECUTIVE_DATA_MODEL_ID,
             )
         )
 
         if model is None:
 
-            raise Exception(
+            raise LookupError(
                 "AI model not found."
             )
 
-        user_prompt = (
+        user_prompt_template = (
             prompt.user_prompt
             or "{transcript}"
-        ).replace(
-            "{transcript}",
-            transcript,
         )
+
+        if "{transcript}" in user_prompt_template:
+            user_prompt = user_prompt_template.replace(
+                "{transcript}",
+                transcript,
+            )
+        else:
+            user_prompt = (
+                f"{user_prompt_template}\n\n"
+                f"{transcript}"
+            )
 
         analysis_prompt = (
             f"{prompt.system_prompt}\n\n"

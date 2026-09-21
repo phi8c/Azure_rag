@@ -115,6 +115,12 @@ ROLE_MAPPING = {
 class DocumentPreviewRequest(BaseModel):
     drive_id: str
     drive_item_id: str
+
+
+class DeltaCheckRequest(BaseModel):
+    site_id: str | None = None
+    drive_id: str | None = None
+    folder_id: str | None = None
     
     
 @router.post("/preview")
@@ -742,6 +748,7 @@ async def test_delta():
     
 @router.post("/delta/check")
 async def check_delta(
+    request: DeltaCheckRequest | None = None,
     db: AsyncSession = Depends(get_db),
 ):
 
@@ -752,13 +759,25 @@ async def check_delta(
 
     changed = False
     print("in ra upload option", upload_options)
+    selected_site_id = request.site_id if request else None
+    selected_drive_id = request.drive_id if request else None
+    selected_folder_id = request.folder_id if request else None
+
+    if selected_folder_id:
+        print("Checking selected folder:", selected_folder_id)
 
     for site in upload_options:
+
+        if selected_site_id and site["id"] != selected_site_id:
+            continue
 
         print("=" * 80)
         print("Checking site:", site["name"])
 
         for drive in site["libraries"]:
+
+            if selected_drive_id and drive["id"] != selected_drive_id:
+                continue
 
             print("Checking drive:", drive["name"])
 

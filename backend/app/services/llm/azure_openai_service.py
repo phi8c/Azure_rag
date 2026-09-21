@@ -5,6 +5,10 @@ from openai import AsyncAzureOpenAI
 from app.core.settings import settings
 
 
+class LLMResponseTruncatedError(ValueError):
+    pass
+
+
 class AzureOpenAIService:
 
     def __init__(self) -> None:
@@ -39,6 +43,33 @@ class AzureOpenAIService:
             .message.content
             or ""
         )
+
+    async def chat_json(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        temperature: float = 0.2,
+        max_completion_tokens: int = 2000,
+    ) -> str:
+
+        response = await self._client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_completion_tokens=max_completion_tokens,
+            response_format={
+                "type": "json_object",
+            },
+        )
+
+        choice = response.choices[0]
+
+        if choice.finish_reason == "length":
+            raise LLMResponseTruncatedError(
+                "LLM JSON response reached the output token limit."
+            )
+
+        return choice.message.content or ""
 
     async def chat_stream(
         self,

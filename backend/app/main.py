@@ -191,11 +191,11 @@ app.add_middleware(
 
 
 
-@app.on_event("startup")
-async def startup():
-    asyncio.create_task(
-        MeetingAnalysisWorker.run(),
-    )
+# @app.on_event("startup")
+# async def startup():
+#     asyncio.create_task(
+#         MeetingAnalysisWorker.run(),
+#     )
 
 
 

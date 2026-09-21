@@ -12,3 +12,7 @@ __pycache__/
 logs/
 
 *.log
+
+
+data/*.duckdb
+data/*.duckdb.wal
