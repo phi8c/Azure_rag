@@ -28,6 +28,9 @@ from app.services.contract.contract_advanced_service import (
     ContractAdvancedService,
 )
 from app.schemas.contract_chat_request import ( ContractChatRequest)
+from app.schemas.contract_advanced_request import (
+    ContractLegalReviewRequest,
+)
 
 router = APIRouter(
 
@@ -132,6 +135,55 @@ async def analyze_contract_advanced(
             Path(file_path).unlink(
                 missing_ok=True
             )
+
+
+@router.post("/analyze-advanced/company-rule")
+async def analyze_contract_advanced_company_rule(
+    file: UploadFile = File(...),
+    model_id: UUID = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    suffix = Path(file.filename or "").suffix.lower()
+
+    if suffix not in {".pdf", ".docx"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF and DOCX files are supported.",
+        )
+
+    file_path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=suffix,
+        ) as tmp:
+            file_path = tmp.name
+            shutil.copyfileobj(file.file, tmp)
+
+        return await ContractAdvancedService().analyze_company_rule(
+            db=db,
+            file_path=file_path,
+            model_id=model_id,
+        )
+    finally:
+        if file_path:
+            Path(file_path).unlink(missing_ok=True)
+
+
+@router.post("/analyze-advanced/legal")
+async def analyze_contract_advanced_legal(
+    request: ContractLegalReviewRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    return await ContractAdvancedService().analyze_legal(
+        db=db,
+        model_id=request.model_id,
+        legal_checks=[
+            check.model_dump()
+            for check in request.legal_checks
+        ],
+    )
 
 
 @router.post(

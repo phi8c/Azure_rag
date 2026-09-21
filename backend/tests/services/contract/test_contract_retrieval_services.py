@@ -1,5 +1,7 @@
 import json
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -257,4 +259,104 @@ class LegalRetrievalServiceTest(unittest.TestCase):
         self.assertEqual(
             normalized,
             {"title": ["contract"]},
+        )
+
+
+class LegalRetrievalConcurrencyTest(
+    unittest.IsolatedAsyncioTestCase
+):
+
+    async def test_async_retrieval_is_bounded_and_preserves_order(self):
+        checks = [
+            {
+                "contract_text": f"Clause {index}",
+                "metadata_seeds": {
+                    "title": [f"query {index}"],
+                },
+            }
+            for index in range(4)
+        ]
+        active = 0
+        maximum_active = 0
+        lock = threading.Lock()
+
+        def search_one(
+            db_path,
+            check,
+            check_index,
+            check_count,
+        ):
+            nonlocal active, maximum_active
+
+            with lock:
+                active += 1
+                maximum_active = max(maximum_active, active)
+
+            time.sleep(0.01 * (5 - check_index))
+
+            with lock:
+                active -= 1
+
+            return [f"law-{check_index}"], 0.01
+
+        documents = [
+            {
+                "document_id": f"law-{index}",
+                "metadata": {},
+                "vn_text": f"Law {index}",
+            }
+            for index in range(1, 5)
+        ]
+
+        with (
+            patch.object(
+                LegalRetrievalService,
+                "LEGAL_FTS_CONCURRENCY",
+                2,
+            ),
+            patch.object(
+                LegalRetrievalService,
+                "_resolve_db_path",
+                return_value=Path("legal.duckdb"),
+            ),
+            patch.object(
+                LegalRetrievalService,
+                "_validate_database",
+            ),
+            patch.object(
+                LegalRetrievalService,
+                "_run_search_one_check",
+                side_effect=search_one,
+            ),
+            patch.object(
+                LegalRetrievalService,
+                "_load_documents_once",
+                return_value=documents,
+            ) as load_documents,
+        ):
+            result = await LegalRetrievalService.retrieve_async(
+                checks
+            )
+
+        self.assertEqual(maximum_active, 2)
+        self.assertEqual(
+            [item["contract_text"] for item in result],
+            [f"Clause {index}" for index in range(4)],
+        )
+        self.assertEqual(
+            [
+                item["contexts"][0]["document_id"]
+                for item in result
+            ],
+            [f"law-{index}" for index in range(1, 5)],
+        )
+        load_documents.assert_called_once_with(
+            Path("legal.duckdb"),
+            [f"law-{index}" for index in range(1, 5)],
+        )
+
+    async def test_default_concurrency_is_four(self):
+        self.assertEqual(
+            LegalRetrievalService.LEGAL_FTS_CONCURRENCY,
+            4,
         )
