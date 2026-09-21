@@ -16,6 +16,10 @@ from app.services.contract.company_policy_retrieval_service import (
 from app.services.contract.legal_retrieval_service import (
     LegalRetrievalService,
 )
+from scripts.setup_legal_fts import (
+    build_fts_index,
+    populate_legal_search,
+)
 
 
 class CompanyPolicyRetrievalServiceTest(
@@ -142,6 +146,9 @@ class LegalRetrievalServiceTest(unittest.TestCase):
                 ),
             ],
         )
+        connection.execute("LOAD fts")
+        populate_legal_search(connection)
+        build_fts_index(connection)
         connection.close()
 
     def tearDown(self):
@@ -179,6 +186,38 @@ class LegalRetrievalServiceTest(unittest.TestCase):
             result[0]["contexts"][0]["document_id"],
             "law-1",
         )
+        self.assertEqual(len(result[0]["contexts"]), 1)
+
+    def test_missing_fts_index_has_setup_instruction(self):
+        connection = duckdb.connect(str(self.db_path))
+        connection.execute("LOAD fts")
+        connection.execute(
+            "PRAGMA drop_fts_index('legal_search')"
+        )
+        connection.execute("DROP TABLE legal_search")
+        connection.close()
+
+        with (
+            patch.object(
+                settings,
+                "LEGAL_DB_PATH",
+                str(self.db_path),
+            ),
+            self.assertRaisesRegex(
+                RuntimeError,
+                "setup_legal_fts.py --rebuild",
+            ),
+        ):
+            LegalRetrievalService.retrieve(
+                [
+                    {
+                        "contract_text": "Penalty clause",
+                        "metadata_seeds": {
+                            "title": ["contract penalties"],
+                        },
+                    }
+                ]
+            )
 
     def test_empty_context_preserves_legal_check(self):
         with patch.object(

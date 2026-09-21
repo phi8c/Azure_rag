@@ -1,8 +1,4 @@
 import json
-import math
-import re
-import unicodedata
-from collections import Counter
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -18,6 +14,7 @@ from app.core.settings import settings
 class LegalRetrievalService:
 
     LEGAL_TOP_K = 1
+    FTS_SCHEMA = "fts_main_legal_search"
 
     SUPPORTED_METADATA_FIELDS = {
         "doc_type",
@@ -42,16 +39,6 @@ class LegalRetrievalService:
         "article_titles",
         "citations",
     }
-
-    _CITATION_FIELDS = {
-        "raw",
-        "target",
-        "dieu",
-        "khoan",
-        "diem",
-    }
-
-    _TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 
     @classmethod
     def retrieve(
@@ -85,21 +72,10 @@ class LegalRetrievalService:
         )
 
         try:
-            started_at = perf_counter()
-            candidates = cls._load_candidates(
-                connection
-            )
-            logger.info(
-                "[CONTRACT_ADVANCED] legal_candidate_load "
-                "completed in %.3fs candidates=%d",
-                perf_counter() - started_at,
-                len(candidates),
-            )
-
-            indexes = cls._build_indexes(
-                candidates
-            )
+            total_started_at = perf_counter()
+            cls._load_and_validate_fts(connection)
             ranked_ids_by_check = []
+            fts_duration = 0.0
 
             for check_index, check in enumerate(
                 legal_checks,
@@ -113,20 +89,21 @@ class LegalRetrievalService:
                     len(legal_checks),
                     check["contract_text"],
                 )
-                document_ids = cls._rank_document_ids(
-                    candidates=candidates,
-                    indexes=indexes,
+                document_ids = cls._search_document_ids(
+                    connection=connection,
                     metadata_seeds=check.get(
                         "metadata_seeds",
                         {},
                     ),
                 )
+                query_duration = perf_counter() - started_at
+                fts_duration += query_duration
                 logger.info(
                     "[CONTRACT_ADVANCED] legal_retrieval completed "
                     "check=%d/%d in %.3fs result_count=%d",
                     check_index,
                     len(legal_checks),
-                    perf_counter() - started_at,
+                    query_duration,
                     len(document_ids),
                 )
                 ranked_ids_by_check.append(
@@ -140,6 +117,7 @@ class LegalRetrievalService:
                     for document_id in document_ids
                 )
             )
+            document_load_started_at = perf_counter()
             documents = {
                 document["document_id"]: document
                 for document in cls._load_documents(
@@ -147,6 +125,16 @@ class LegalRetrievalService:
                     document_ids=unique_document_ids,
                 )
             }
+            document_load_duration = (
+                perf_counter() - document_load_started_at
+            )
+            logger.info(
+                "[LEGAL_RETRIEVAL][TIMING] "
+                "fts_query=%.3fs document_load=%.3fs total=%.3fs",
+                fts_duration,
+                document_load_duration,
+                perf_counter() - total_started_at,
+            )
 
             return [
                 {
@@ -166,79 +154,38 @@ class LegalRetrievalService:
             connection.close()
 
     @classmethod
-    def _load_candidates(
+    def _load_and_validate_fts(
         cls,
         connection,
-    ) -> list[dict[str, Any]]:
+    ) -> None:
 
-        rows = connection.execute(
+        try:
+            connection.execute("LOAD fts")
+        except duckdb.Error as exc:
+            raise RuntimeError(
+                "DuckDB FTS extension is not available. Run "
+                "python scripts/setup_legal_fts.py --rebuild first."
+            ) from exc
+
+        index_exists = connection.execute(
             """
-            SELECT document_id, metadata
-            FROM legal_documents
-            """
-        ).fetchall()
+            SELECT COUNT(*) > 0
+            FROM information_schema.schemata
+            WHERE schema_name = ?
+            """,
+            [cls.FTS_SCHEMA],
+        ).fetchone()[0]
 
-        candidates = []
-
-        for document_id, raw_metadata in rows:
-            metadata = cls._parse_metadata(
-                raw_metadata
+        if not index_exists:
+            raise RuntimeError(
+                "Legal FTS index is not initialized. Run "
+                "python scripts/setup_legal_fts.py --rebuild first."
             )
-
-            candidates.append(
-                {
-                    "document_id": document_id,
-                    "metadata": metadata,
-                    "field_tokens": {
-                        field: cls._tokenize(
-                            cls._metadata_value_to_text(
-                                field,
-                                metadata.get(field),
-                            )
-                        )
-                        for field in cls.SUPPORTED_METADATA_FIELDS
-                    },
-                }
-            )
-
-        return candidates
 
     @classmethod
-    def _build_indexes(
+    def _search_document_ids(
         cls,
-        candidates: list[dict[str, Any]],
-    ) -> dict[str, dict[str, Any]]:
-
-        field_indexes = {
-            field: cls._build_bm25_index(
-                [
-                    candidate["field_tokens"][field]
-                    for candidate in candidates
-                ]
-            )
-            for field in cls.SUPPORTED_METADATA_FIELDS
-        }
-        global_documents = [
-            [
-                token
-                for tokens in candidate["field_tokens"].values()
-                for token in tokens
-            ]
-            for candidate in candidates
-        ]
-        field_indexes["__global__"] = (
-            cls._build_bm25_index(
-                global_documents
-            )
-        )
-
-        return field_indexes
-
-    @classmethod
-    def _rank_document_ids(
-        cls,
-        candidates: list[dict[str, Any]],
-        indexes: dict[str, dict[str, Any]],
+        connection,
         metadata_seeds: Any,
     ) -> list[str]:
 
@@ -246,46 +193,34 @@ class LegalRetrievalService:
             metadata_seeds
         )
 
-        if not normalized_seeds or not candidates:
+        if not normalized_seeds:
             return []
 
-        scores = [0.0] * len(candidates)
+        search_query = " ".join(
+            seed
+            for seeds in normalized_seeds.values()
+            for seed in seeds
+        )
+        rows = connection.execute(
+            f"""
+            SELECT document_id
+            FROM (
+                SELECT
+                    document_id,
+                    fts_main_legal_search.match_bm25(
+                        document_id,
+                        ?
+                    ) AS score
+                FROM legal_search
+            ) AS ranked
+            WHERE score IS NOT NULL
+            ORDER BY score DESC
+            LIMIT {cls.LEGAL_TOP_K}
+            """,
+            [search_query],
+        ).fetchall()
 
-        for field, seeds in normalized_seeds.items():
-            query_tokens = cls._tokenize(
-                " ".join(seeds)
-            )
-
-            field_scores = cls._bm25_scores(
-                index=indexes[field],
-                query_tokens=query_tokens,
-            )
-
-            fallback_scores = cls._bm25_scores(
-                index=indexes["__global__"],
-                query_tokens=query_tokens,
-            )
-
-            for index in range(len(candidates)):
-                scores[index] += (
-                    field_scores[index]
-                    + fallback_scores[index] * 0.2
-                )
-
-        ranked_indexes = sorted(
-            (
-                index
-                for index, score in enumerate(scores)
-                if score > 0
-            ),
-            key=lambda index: scores[index],
-            reverse=True,
-        )[:cls.LEGAL_TOP_K]
-
-        return [
-            candidates[index]["document_id"]
-            for index in ranked_indexes
-        ]
+        return [row[0] for row in rows]
 
     @classmethod
     def _load_documents(
@@ -372,179 +307,3 @@ class LegalRetrievalService:
         raise ValueError(
             "Legal document metadata must be a JSON object."
         )
-
-    @classmethod
-    def _metadata_value_to_text(
-        cls,
-        field: str,
-        value: Any,
-    ) -> str:
-
-        if value is None:
-            return ""
-
-        if field == "citations":
-            return cls._citation_value_to_text(value)
-
-        if isinstance(value, dict):
-            return " ".join(
-                cls._metadata_value_to_text(
-                    field,
-                    item,
-                )
-                for item in value.values()
-            )
-
-        if isinstance(value, list):
-            return " ".join(
-                cls._metadata_value_to_text(
-                    field,
-                    item,
-                )
-                for item in value
-            )
-
-        if isinstance(value, (str, int, float)):
-            return str(value)
-
-        return ""
-
-    @classmethod
-    def _citation_value_to_text(
-        cls,
-        value: Any,
-    ) -> str:
-
-        if isinstance(value, list):
-            return " ".join(
-                cls._citation_value_to_text(item)
-                for item in value
-            )
-
-        if isinstance(value, dict):
-            return " ".join(
-                str(value[field])
-                for field in cls._CITATION_FIELDS
-                if value.get(field) is not None
-            )
-
-        if isinstance(value, str):
-            return value
-
-        return ""
-
-    @classmethod
-    def _tokenize(
-        cls,
-        value: str,
-    ) -> list[str]:
-
-        normalized = unicodedata.normalize(
-            "NFKC",
-            value,
-        ).casefold()
-
-        return cls._TOKEN_RE.findall(
-            normalized
-        )
-
-    @staticmethod
-    def _build_bm25_index(
-        documents: list[list[str]],
-    ) -> dict[str, Any]:
-
-        frequencies = [
-            Counter(document)
-            for document in documents
-        ]
-        document_frequencies = Counter()
-
-        for frequency in frequencies:
-            document_frequencies.update(
-                frequency.keys()
-            )
-
-        return {
-            "documents": documents,
-            "frequencies": frequencies,
-            "document_frequencies": document_frequencies,
-            "document_count": len(documents),
-            "average_length": (
-                sum(len(document) for document in documents)
-                / len(documents)
-                if documents
-                else 0.0
-            ),
-        }
-
-    @staticmethod
-    def _bm25_scores(
-        index: dict[str, Any],
-        query_tokens: list[str],
-        k1: float = 1.5,
-        b: float = 0.75,
-    ) -> list[float]:
-
-        documents = index["documents"]
-        document_count = index["document_count"]
-        average_length = index["average_length"]
-
-        if (
-            not documents
-            or not query_tokens
-            or average_length == 0
-        ):
-            return [0.0] * document_count
-
-        frequencies = index["frequencies"]
-        query_terms = set(query_tokens)
-        document_frequencies = index[
-            "document_frequencies"
-        ]
-
-        scores = []
-
-        for document, frequency in zip(
-            documents,
-            frequencies,
-        ):
-            score = 0.0
-
-            for term in query_terms:
-                term_frequency = frequency.get(term, 0)
-
-                if term_frequency == 0:
-                    continue
-
-                document_frequency = document_frequencies[term]
-                inverse_document_frequency = math.log(
-                    1
-                    + (
-                        document_count
-                        - document_frequency
-                        + 0.5
-                    )
-                    / (document_frequency + 0.5)
-                )
-                denominator = (
-                    term_frequency
-                    + k1
-                    * (
-                        1
-                        - b
-                        + b
-                        * len(document)
-                        / average_length
-                    )
-                )
-
-                score += (
-                    inverse_document_frequency
-                    * term_frequency
-                    * (k1 + 1)
-                    / denominator
-                )
-
-            scores.append(score)
-
-        return scores
