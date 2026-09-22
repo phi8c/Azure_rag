@@ -10,10 +10,15 @@ from app.api.v1.contract_router import (
     analyze_contract_advanced,
     analyze_contract_advanced_company_rule,
     analyze_contract_advanced_legal,
+    legal_chat,
 )
 from app.schemas.contract_advanced_request import (
-    ContractLegalCheck,
     ContractLegalReviewRequest,
+    LegalChatRequest,
+)
+from app.services.contract.legal_chat_service import LegalChatService
+from app.services.contract.legal_contract_analysis_service import (
+    LegalContractAnalysisService,
 )
 from app.services.contract.contract_advanced_service import (
     ContractAdvancedService,
@@ -92,7 +97,7 @@ class ContractAdvancedRouterTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(observed_path.is_file())
             return {
                 "company_rule_review": {"results": []},
-                "legal_checks": [],
+                "contract_content": "Extracted contract",
             }
 
         upload = UploadFile(
@@ -111,41 +116,64 @@ class ContractAdvancedRouterTest(unittest.IsolatedAsyncioTestCase):
                 db=None,
             )
 
-        self.assertEqual(result["legal_checks"], [])
+        self.assertEqual(
+            result["contract_content"],
+            "Extracted contract",
+        )
+        self.assertNotIn("legal_checks", result)
         self.assertFalse(observed_path.exists())
 
-    async def test_legal_endpoint_passes_handoff_data(self):
+    async def test_legal_endpoint_passes_extracted_contract(self):
         model_id = uuid4()
         request = ContractLegalReviewRequest(
             model_id=model_id,
-            legal_checks=[
-                ContractLegalCheck(
-                    contract_text="Clause",
-                    metadata_seeds={"title": ["contract"]},
-                )
-            ],
+            output_extract=" Contract body ",
         )
 
         with patch.object(
-            ContractAdvancedService,
-            "analyze_legal",
+            LegalContractAnalysisService,
+            "analyze",
             new=AsyncMock(
-                return_value={"legal_review": {"results": []}}
+                return_value={"results": []}
             ),
-        ) as analyze_legal:
+        ) as analyze:
             result = await analyze_contract_advanced_legal(
                 request=request,
                 db=None,
             )
 
-        analyze_legal.assert_awaited_once_with(
+        analyze.assert_awaited_once_with(
             db=None,
             model_id=model_id,
-            legal_checks=[
-                {
-                    "contract_text": "Clause",
-                    "metadata_seeds": {"title": ["contract"]},
-                }
-            ],
+            output_extract="Contract body",
         )
-        self.assertEqual(result, {"legal_review": {"results": []}})
+        self.assertEqual(result, {"results": []})
+
+    async def test_legal_chat_endpoint_uses_json_request(self):
+        model_id = uuid4()
+        request = LegalChatRequest(
+            model_id=model_id,
+            question=" Question ",
+            extracted_contract=" Contract body ",
+        )
+
+        with patch.object(
+            LegalChatService,
+            "chat",
+            new=AsyncMock(
+                return_value={
+                    "answer": "Answer",
+                    "retrieval_seeds": {},
+                    "sources": [],
+                }
+            ),
+        ) as chat:
+            result = await legal_chat(request=request, db=None)
+
+        chat.assert_awaited_once_with(
+            db=None,
+            model_id=model_id,
+            question="Question",
+            extracted_contract="Contract body",
+        )
+        self.assertEqual(result["answer"], "Answer")

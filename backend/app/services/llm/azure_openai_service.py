@@ -28,8 +28,6 @@ class AzureOpenAIService:
     ) -> str:
         
         
-        print(messages)
-
         response = await self._client.chat.completions.create(
             model=model,
             messages=messages,

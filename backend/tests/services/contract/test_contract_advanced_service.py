@@ -198,7 +198,7 @@ class ContractAdvancedServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, {"results": []})
         self.service.llm.chat_json.assert_not_awaited()
 
-    async def test_company_entry_returns_legal_handoff_only(self):
+    async def test_company_entry_returns_review_and_contract_content(self):
         model = type("Model", (), {"model_name": "deployment"})()
         config = type(
             "Config",
@@ -210,12 +210,6 @@ class ContractAdvancedServiceTest(unittest.IsolatedAsyncioTestCase):
                 {
                     "contract_text": "Company clause",
                     "retrieval_seeds": ["approval"],
-                }
-            ],
-            "legal_checks": [
-                {
-                    "contract_text": "Legal clause",
-                    "metadata_seeds": {"title": ["contract"]},
                 }
             ],
         }
@@ -233,7 +227,7 @@ class ContractAdvancedServiceTest(unittest.IsolatedAsyncioTestCase):
             ) as extract_contract,
             patch.object(
                 self.service,
-                "_analyze_contract_for_retrieval",
+                "_analyze_contract_for_company_rules",
                 new=AsyncMock(return_value=analysis),
             ) as analyzer,
             patch.object(
@@ -268,9 +262,52 @@ class ContractAdvancedServiceTest(unittest.IsolatedAsyncioTestCase):
             result,
             {
                 "company_rule_review": {"results": ["company"]},
-                "legal_checks": analysis["legal_checks"],
+                "contract_content": "Contract body",
             },
         )
+
+    def test_company_analyzer_accepts_company_only_schema(self):
+        result = self.service._validate_company_analyzer_result(
+            {
+                "company_rule_checks": [
+                    {
+                        "contract_text": "Clause",
+                        "retrieval_seeds": [
+                            " first ",
+                            "ignored",
+                        ],
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "company_rule_checks": [
+                    {
+                        "contract_text": "Clause",
+                        "retrieval_seeds": ["first"],
+                    }
+                ]
+            },
+        )
+
+    def test_company_check_rejects_empty_seed(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "must contain exactly one seed",
+        ):
+            self.service._validate_company_analyzer_result(
+                {
+                    "company_rule_checks": [
+                        {
+                            "contract_text": "Clause",
+                            "retrieval_seeds": ["  "],
+                        }
+                    ]
+                }
+            )
 
     async def test_legal_entry_starts_from_handoff_checks(self):
         model = type("Model", (), {"model_name": "deployment"})()
