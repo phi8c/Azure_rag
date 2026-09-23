@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
+from starlette.responses import StreamingResponse
 
 from app.api.v1.contract_router import (
     analyze_contract_advanced,
@@ -130,24 +131,37 @@ class ContractAdvancedRouterTest(unittest.IsolatedAsyncioTestCase):
             output_extract=" Contract body ",
         )
 
+        calls = []
+
+        async def analyze(service, **kwargs):
+            calls.append(kwargs)
+            yield {"event": "started", "data": {"total": 0}}
+            yield {"event": "completed", "data": {"total": 0}}
+
         with patch.object(
             LegalContractAnalysisService,
             "analyze",
-            new=AsyncMock(
-                return_value={"results": []}
-            ),
-        ) as analyze:
+            new=analyze,
+        ):
             result = await analyze_contract_advanced_legal(
                 request=request,
                 db=None,
             )
 
-        analyze.assert_awaited_once_with(
-            db=None,
-            model_id=model_id,
-            output_extract="Contract body",
+        self.assertIsInstance(result, StreamingResponse)
+        body = "".join(
+            [chunk async for chunk in result.body_iterator]
         )
-        self.assertEqual(result, {"results": []})
+        self.assertEqual(
+            calls,
+            [{
+                "db": None,
+                "model_id": model_id,
+                "output_extract": "Contract body",
+            }],
+        )
+        self.assertIn("event: started", body)
+        self.assertIn("event: completed", body)
 
     async def test_legal_chat_endpoint_uses_json_request(self):
         model_id = uuid4()

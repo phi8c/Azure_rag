@@ -1,8 +1,7 @@
 import asyncio
 import json
-from collections import Counter
 from time import perf_counter
-from typing import Any
+from typing import Any, AsyncIterator
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +22,6 @@ from app.services.llm.azure_openai_service import AzureOpenAIService
 class LegalContractAnalysisService:
     MAX_LEGAL_CHECKS = 8
     MAX_SEEDS_PER_METADATA_FIELD = 2
-    RETRIEVAL_CONCURRENCY = 4
     ALLOWED_METADATA_FIELDS = {
             "doc_type",
             "doc_number",
@@ -55,7 +53,7 @@ class LegalContractAnalysisService:
         db: AsyncSession,
         model_id: UUID,
         output_extract: str,
-    ) -> dict[str, Any]:
+    ) -> AsyncIterator[dict[str, Any]]:
         total_started_at = perf_counter()
         model, model_config = await self._load_model_context(
             db=db,
@@ -82,79 +80,107 @@ class LegalContractAnalysisService:
         )
 
         if not legal_checks:
-            contract_split_logger.info(
-                "[LEGAL_CONTRACT][TIMING] retrieval=0.000s"
-            )
-            contract_split_logger.info(
-                "[LEGAL_CONTRACT][TIMING] reviewer=0.000s"
-            )
+            yield {"event": "started", "data": {"total": 0}}
             contract_split_logger.info(
                 "[LEGAL_CONTRACT][TIMING] total=%.3fs",
                 perf_counter() - total_started_at,
             )
-            return {"results": []}
+            yield {"event": "completed", "data": {"total": 0}}
+            return
 
-        started_at = perf_counter()
-        review_data = await self._retrieve_legal_context(legal_checks)
-        contract_split_logger.info(
-            "[LEGAL_CONTRACT][TIMING] retrieval=%.3fs documents=%d",
-            perf_counter() - started_at,
-            sum(len(item["legal_context"]) for item in review_data),
-        )
-
-        started_at = perf_counter()
         reviewer_prompt = await self._load_prompt(
             db=db,
             prompt_code=PromptCode.LEGAL_CONTRACT_REVIEWER,
         )
-        reviewer_result = await self._call_reviewer(
-            prompt=reviewer_prompt,
-            review_data=review_data,
-            model_name=model.model_name,
-            temperature=float(model_config.temperature),
-            max_tokens=int(model_config.max_tokens),
-        )
-        response = self._validate_reviewer_result(
-            reviewer_result,
-            legal_checks,
-        )
-        contract_split_logger.info(
-            "[LEGAL_CONTRACT][TIMING] reviewer=%.3fs",
-            perf_counter() - started_at,
-        )
+        total = len(legal_checks)
+        yield {"event": "started", "data": {"total": total}}
+
+        for index, check in enumerate(legal_checks):
+            check_started_at = perf_counter()
+            reviewer_timed = False
+
+            try:
+                retrieval_started_at = perf_counter()
+                try:
+                    documents = await asyncio.to_thread(
+                        LegalChatRetrievalService.retrieve,
+                        check["metadata_seeds"],
+                    )
+                finally:
+                    contract_split_logger.info(
+                        "[LEGAL_CONTRACT][CHECK %d/%d] retrieval=%.3fs",
+                        index + 1,
+                        total,
+                        perf_counter() - retrieval_started_at,
+                    )
+
+                review_item = {
+                    "contract_text": check["contract_text"],
+                    "legal_context": documents,
+                }
+                reviewer_started_at = perf_counter()
+                try:
+                    reviewer_result = await self._call_reviewer(
+                        prompt=reviewer_prompt,
+                        review_data=review_item,
+                        model_name=model.model_name,
+                        temperature=float(model_config.temperature),
+                        max_tokens=int(model_config.max_tokens),
+                    )
+                    result = self._validate_reviewer_result(
+                        reviewer_result,
+                        check["contract_text"],
+                    )
+                finally:
+                    contract_split_logger.info(
+                        "[LEGAL_CONTRACT][CHECK %d/%d] reviewer=%.3fs",
+                        index + 1,
+                        total,
+                        perf_counter() - reviewer_started_at,
+                    )
+                    reviewer_timed = True
+                yield {
+                    "event": "result",
+                    "data": {
+                        "index": index,
+                        "total": total,
+                        "result": result,
+                    },
+                }
+            except Exception as exc:
+                contract_split_logger.exception(
+                    "[LEGAL_CONTRACT][CHECK %d/%d] failed",
+                    index + 1,
+                    total,
+                )
+                yield {
+                    "event": "error",
+                    "data": {
+                        "index": index,
+                        "total": total,
+                        "check": check,
+                        "error": str(exc),
+                    },
+                }
+            finally:
+                if not reviewer_timed:
+                    contract_split_logger.info(
+                        "[LEGAL_CONTRACT][CHECK %d/%d] reviewer=0.000s",
+                        index + 1,
+                        total,
+                    )
+                contract_split_logger.info(
+                    "[LEGAL_CONTRACT][CHECK %d/%d] total=%.3fs",
+                    index + 1,
+                    total,
+                    perf_counter() - check_started_at,
+                )
+
         contract_split_logger.info(
             "[LEGAL_CONTRACT][TIMING] total=%.3fs",
             perf_counter() - total_started_at,
         )
-
-        return response
-
-    async def _retrieve_legal_context(
-        self,
-        legal_checks: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        semaphore = asyncio.Semaphore(self.RETRIEVAL_CONCURRENCY)
-
-        async def retrieve_one(index: int, check: dict[str, Any]):
-            async with semaphore:
-                documents = await asyncio.to_thread(
-                    LegalChatRetrievalService.retrieve,
-                    check["metadata_seeds"],
-                )
-                return index, {
-                    "contract_text": check["contract_text"],
-                    "legal_context": documents,
-                }
-
-        results = await asyncio.gather(
-            *[
-                retrieve_one(index, check)
-                for index, check in enumerate(legal_checks)
-            ]
-        )
-        results.sort(key=lambda item: item[0])
-
-        return [item[1] for item in results]
+        yield {"event": "completed", "data": {"total": total}}
 
     async def _call_analyzer(
         self,
@@ -183,7 +209,7 @@ class LegalContractAnalysisService:
     async def _call_reviewer(
         self,
         prompt,
-        review_data: list[dict[str, Any]],
+        review_data: dict[str, Any],
         model_name: str,
         temperature: float,
         max_tokens: int,
@@ -296,82 +322,61 @@ class LegalContractAnalysisService:
     @staticmethod
     def _validate_reviewer_result(
         result: Any,
-        legal_checks: list[dict[str, Any]],
+        expected_contract_text: str,
     ) -> dict[str, Any]:
         if not isinstance(result, dict):
             raise ValueError(
                 "Legal Contract Reviewer response must be an object."
             )
 
-        results = result.get("results")
+        item = result.get("result")
 
-        if not isinstance(results, list):
-            raise ValueError("Legal reviewer results must be a list.")
+        if not isinstance(item, dict):
+            raise ValueError("Legal reviewer result must be an object.")
 
-        sanitized_results = []
+        contract_text = item.get("contract_text")
+        status = item.get("status")
+        explanation = item.get("explanation")
+        recommendation = item.get("recommendation")
+        sources = item.get("sources")
 
-        for item in results:
-            if not isinstance(item, dict):
-                raise ValueError(
-                    "Each legal reviewer result must be an object."
-                )
-
-            contract_text = item.get("contract_text")
-            status = item.get("status")
-            explanation = item.get("explanation")
-            recommendation = item.get("recommendation")
-            sources = item.get("sources")
-
-            if not isinstance(contract_text, str):
-                raise ValueError(
-                    "Reviewer result contract_text must be a string."
-                )
-
-            if status not in {"COMPLIANT", "RISK", "UNCLEAR"}:
-                raise ValueError("Reviewer result status is invalid.")
-
-            if not isinstance(explanation, str):
-                raise ValueError(
-                    "Reviewer result explanation must be a string."
-                )
-
-            if not isinstance(recommendation, str):
-                raise ValueError(
-                    "Reviewer result recommendation must be a string."
-                )
-
-            if not isinstance(sources, list):
-                raise ValueError(
-                    "Reviewer result sources must be a list."
-                )
-
-            sanitized_results.append(
-                {
-                    "contract_text": contract_text,
-                    "status": status,
-                    "explanation": explanation,
-                    "recommendation": recommendation,
-                    "sources": [
-                        {
-                            key: value
-                            for key, value in source.items()
-                            if key != "vn_text"
-                        }
-                        for source in sources
-                        if isinstance(source, dict)
-                    ],
-                }
-            )
-
-        expected = [check["contract_text"] for check in legal_checks]
-        actual = [item["contract_text"] for item in sanitized_results]
-
-        if Counter(expected) != Counter(actual):
+        if contract_text != expected_contract_text:
             raise ValueError(
-                "Legal reviewer results do not match legal checks."
+                "Reviewer result contract_text does not match the "
+                "current legal check."
             )
 
-        return {"results": sanitized_results}
+        if status not in {"COMPLIANT", "RISK", "UNCLEAR"}:
+            raise ValueError("Reviewer result status is invalid.")
+
+        if not isinstance(explanation, str):
+            raise ValueError(
+                "Reviewer result explanation must be a string."
+            )
+
+        if not isinstance(recommendation, str):
+            raise ValueError(
+                "Reviewer result recommendation must be a string."
+            )
+
+        if not isinstance(sources, list):
+            raise ValueError("Reviewer result sources must be a list.")
+
+        return {
+            "contract_text": contract_text,
+            "status": status,
+            "explanation": explanation,
+            "recommendation": recommendation,
+            "sources": [
+                {
+                    key: value
+                    for key, value in source.items()
+                    if key != "vn_text"
+                }
+                for source in sources
+                if isinstance(source, dict)
+            ],
+        }
 
     @staticmethod
     def _parse_json_object(response: str) -> dict[str, Any]:

@@ -1,5 +1,6 @@
 from uuid import UUID
 from pathlib import Path
+import json
 
 import shutil
 import tempfile
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import (
     get_db
 )
+from fastapi.responses import StreamingResponse
 from app.core.contract_advanced_logging import (
     contract_split_logger,
 )
@@ -204,25 +206,27 @@ async def analyze_contract_advanced_legal(
     request: ContractLegalReviewRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    request_started_at = perf_counter()
+    service = LegalContractAnalysisService()
 
-    try:
-        response = await LegalContractAnalysisService().analyze(
+    async def stream_response():
+        async for item in service.analyze(
             db=db,
             model_id=request.model_id,
             output_extract=request.output_extract,
-        )
-        contract_split_logger.info(
-            "[CONTRACT_LEGAL][TIMING] api_total=%.3fs",
-            perf_counter() - request_started_at,
-        )
-        return response
-    except Exception:
-        contract_split_logger.exception(
-            "[CONTRACT_LEGAL] failed after %.3fs",
-            perf_counter() - request_started_at,
-        )
-        raise
+        ):
+            yield (
+                f"event: {item['event']}\n"
+                f"data: {json.dumps(item['data'], ensure_ascii=False)}\n\n"
+            )
+
+    return StreamingResponse(
+        stream_response(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/legal-chat")

@@ -47,7 +47,7 @@ class LegalContractAnalysisServiceTest(
             {"title": ["first", "second"]},
         )
 
-    async def test_analyze_calls_two_llms_and_retrieves_each_check(self):
+    async def test_analyze_streams_each_check_sequentially(self):
         model = type("Model", (), {"model_name": "deployment"})()
         config = type(
             "Config",
@@ -87,22 +87,24 @@ class LegalContractAnalysisServiceTest(
             """,
             """
             {
-              "results": [
-                {
-                  "contract_text": "Clause A",
-                  "status": "RISK",
-                  "explanation": "Risk explanation",
-                  "recommendation": "Revise clause",
-                  "sources": [{"document_id": "law-1", "vn_text": "omit"}]
-                },
-                {
-                  "contract_text": "Clause B",
-                  "status": "COMPLIANT",
-                  "explanation": "Compliant explanation",
-                  "recommendation": "Keep clause",
-                  "sources": [{"document_id": "law-2"}]
-                }
-              ]
+              "result": {
+                "contract_text": "Clause A",
+                "status": "RISK",
+                "explanation": "Risk explanation",
+                "recommendation": "Revise clause",
+                "sources": [{"document_id": "law-1", "vn_text": "omit"}]
+              }
+            }
+            """,
+            """
+            {
+              "result": {
+                "contract_text": "Clause B",
+                "status": "COMPLIANT",
+                "explanation": "Compliant explanation",
+                "recommendation": "Keep clause",
+                "sources": [{"document_id": "law-2"}]
+              }
             }
             """,
         ]
@@ -142,13 +144,16 @@ class LegalContractAnalysisServiceTest(
                 side_effect=retrieve,
             ) as retrieval,
         ):
-            result = await self.service.analyze(
-                db=None,
-                model_id=None,
-                output_extract="Contract body",
-            )
+            events = [
+                event
+                async for event in self.service.analyze(
+                    db=None,
+                    model_id=None,
+                    output_extract="Contract body",
+                )
+            ]
 
-        self.assertEqual(self.service.llm.chat_json.await_count, 2)
+        self.assertEqual(self.service.llm.chat_json.await_count, 3)
         self.assertEqual(retrieval.call_count, 2)
         self.assertEqual(load_prompt_mock.await_count, 2)
         self.assertEqual(
@@ -159,16 +164,25 @@ class LegalContractAnalysisServiceTest(
             load_prompt_mock.await_args_list[1].kwargs["prompt_code"],
             PromptCode.LEGAL_CONTRACT_REVIEWER,
         )
-        reviewer_prompt_value = (
+        first_reviewer_prompt = (
             self.service.llm.chat_json.await_args_list[1]
             .kwargs["messages"][1]["content"]
         )
-        self.assertIn("legal_context", reviewer_prompt_value)
-        self.assertIn("Full text law-1", reviewer_prompt_value)
-        self.assertEqual(len(result["results"]), 2)
+        second_reviewer_prompt = (
+            self.service.llm.chat_json.await_args_list[2]
+            .kwargs["messages"][1]["content"]
+        )
+        self.assertIn("Full text law-1", first_reviewer_prompt)
+        self.assertNotIn("Full text law-2", first_reviewer_prompt)
+        self.assertIn("Full text law-2", second_reviewer_prompt)
+        self.assertNotIn("Full text law-1", second_reviewer_prompt)
+        self.assertEqual(
+            [event["event"] for event in events],
+            ["started", "result", "result", "completed"],
+        )
         self.assertNotIn(
             "vn_text",
-            result["results"][0]["sources"][0],
+            events[1]["data"]["result"]["sources"][0],
         )
 
     async def test_empty_checks_skip_retrieval_and_reviewer(self):
@@ -206,13 +220,22 @@ class LegalContractAnalysisServiceTest(
                 "retrieve",
             ) as retrieval,
         ):
-            result = await self.service.analyze(
-                db=None,
-                model_id=None,
-                output_extract="Contract body",
-            )
+            events = [
+                event
+                async for event in self.service.analyze(
+                    db=None,
+                    model_id=None,
+                    output_extract="Contract body",
+                )
+            ]
 
-        self.assertEqual(result, {"results": []})
+        self.assertEqual(
+            events,
+            [
+                {"event": "started", "data": {"total": 0}},
+                {"event": "completed", "data": {"total": 0}},
+            ],
+        )
         self.assertEqual(self.service.llm.chat_json.await_count, 1)
         self.assertEqual(load_prompt.await_count, 1)
         retrieval.assert_not_called()
