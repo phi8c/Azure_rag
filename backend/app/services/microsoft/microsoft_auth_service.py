@@ -1,3 +1,5 @@
+import asyncio
+
 from app.core.settings import settings
 from urllib.parse import urlencode
 import httpx
@@ -9,7 +11,10 @@ from datetime import (
 )
 from uuid import UUID
 
-from app.schemas.microsoft_profile import MicrosoftProfile
+from app.schemas.microsoft_profile import (
+    MicrosoftGroup,
+    MicrosoftProfile,
+)
 
 
 class MicrosoftAuthService:
@@ -101,6 +106,49 @@ class MicrosoftAuthService:
             return response.json()
         
     @staticmethod
+    async def get_groups(
+        access_token: str,
+    ) -> list[MicrosoftGroup]:
+
+        url = (
+            "https://graph.microsoft.com/v1.0/"
+            "me/memberOf/microsoft.graph.group"
+            "?$select=id,displayName"
+        )
+        groups = []
+
+        async with httpx.AsyncClient() as client:
+
+            while url:
+                response = await client.get(
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {access_token}"
+                    },
+                )
+
+                response.raise_for_status()
+                data = response.json()
+
+                for group in data.get("value", []):
+                    group_id = group.get("id")
+                    display_name = group.get("displayName")
+
+                    if not group_id or not display_name:
+                        continue
+
+                    groups.append(
+                        MicrosoftGroup(
+                            id=group_id,
+                            display_name=display_name,
+                        )
+                    )
+
+                url = data.get("@odata.nextLink")
+
+        return groups
+
+    @staticmethod
     async def authenticate(
         code: str,
     ) -> MicrosoftProfile:
@@ -109,8 +157,9 @@ class MicrosoftAuthService:
             code,
         )
 
-        user = await MicrosoftAuthService.get_me(
-            token["access_token"],
+        user, groups = await asyncio.gather(
+            MicrosoftAuthService.get_me(token["access_token"]),
+            MicrosoftAuthService.get_groups(token["access_token"]),
         )
 
         claims = token["claims"]
@@ -132,6 +181,7 @@ class MicrosoftAuthService:
             display_name=user[
                 "displayName"
             ],
+            groups=groups,
             refresh_token=token[
                 "refresh_token"
             ],

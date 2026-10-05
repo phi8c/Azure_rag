@@ -29,15 +29,6 @@ from app.schemas.chat_schema import (
 
 )
 
-from app.repositories.permission_repository import (
-
-    PermissionRepository
-
-)
-from app.repositories.role_repository import (
-    RoleRepository
-)
-
 from app.services.azure.azure_search_service import (
 
     AzureSearchService
@@ -46,10 +37,6 @@ from app.services.azure.azure_search_service import (
 
 from app.services.rag.rag_service import (
     RagService
-)
-
-from app.core.not_found_exception import (
-    NotFoundException,
 )
 
 from app.services.message.message_service import (
@@ -83,7 +70,6 @@ from app.enums.prompt_code import ( PromptCode
 import json
 
 from app.repositories.rag_config_repository import WorkspaceConfigRepository
-
 router = APIRouter(
 
     prefix=
@@ -313,18 +299,6 @@ async def query(
 ):
 
 
- role_name = await (
-    RoleRepository.get_by_id(
-        db=db,
-        role_id=body.role_id,
-    )
-)
-
- if role_name is None:
-    raise NotFoundException(
-        "Role not found."
-    )
-    
  if body.conversation_id is None:
     body.conversation_id = uuid4()
 
@@ -341,13 +315,6 @@ async def query(
         email=None,
     )
 
- permissions = await (
-    PermissionRepository
-    .get_role_access(
-        db=db,
-        role_name=role_name,
-    )
-)
 #  retrieval_query = await (
 #      SessionMemoryService
 #      .build_retrieval_query(
@@ -379,16 +346,13 @@ async def query(
 )
  
 #  print("in ra retrieval", retrieval_query)
- print("in ra permission", permissions)
- 
- 
- 
  chunks = []
  if body.mode != PromptCode.PUBLIC:
 
     chunks = await AzureSearchService.retrieve(
         question=body.question,
-        permissions=permissions,
+        user_object_id=body.microsoft_object_id,
+        group_ids=body.group_ids,
     )
 
 
@@ -554,19 +518,6 @@ async def helpdesk_query(
 
 ):
 
-    role_name = await (
-        RoleRepository.get_by_id(
-            db=db,
-            role_id=body.role_id,
-        )
-    )
-
-    if role_name is None:
-
-        raise NotFoundException(
-            "Role not found."
-        )
-
     if body.conversation_id is None:
 
         body.conversation_id = uuid4()
@@ -631,6 +582,8 @@ async def helpdesk_query(
         chunks = AzureSearchService.retrieve_helpdesk(
             question=retrieval_query,
             top_k=top_k,
+            user_object_id=body.microsoft_object_id,
+            group_ids=body.group_ids,
         )
 
     # ======================================

@@ -25,12 +25,11 @@ class ChatRequest(
 
     question:str
 
+    microsoft_object_id: str
 
-    
+    group_ids: list[str]
 
 
-    role_id:int
-    
     model_id:str
     
     mode: PromptCode

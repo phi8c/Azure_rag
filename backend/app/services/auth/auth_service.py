@@ -14,7 +14,7 @@ from app.repositories.microsoft_account_repository import (
     MicrosoftAccountRepository,
 )
 
-from app.schemas.auth import LoginResponse
+from app.schemas.auth import LoginResponse, LoginUserResponse
 from app.schemas.microsoft_profile import MicrosoftProfile
 
 from app.services.microsoft.microsoft_auth_service import (
@@ -55,6 +55,19 @@ class AuthService:
         return LoginResponse(
             access_token=access_token,
             expires_in=86400,
+            user=LoginUserResponse(
+                id=user.id,
+                email=user.email,
+                display_name=user.display_name,
+                avatar_url=user.avatar_url,
+                is_active=user.is_active,
+                tenant_id=profile.tenant_id,
+                microsoft_object_id=profile.object_id,
+                user_principal_name=profile.user_principal_name,
+                groups=profile.groups,
+                created_at=user.created_at,
+                updated_at=user.updated_at,
+            ),
         )
 
     @staticmethod

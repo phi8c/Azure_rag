@@ -28,25 +28,16 @@ async def microsoft_login():
     }
 
 
-from fastapi.responses import RedirectResponse
-
-FRONTEND_URL = "http://localhost:5173"
-
-
-@router.get("/microsoft/callback")
+@router.get(
+    "/microsoft/callback",
+    response_model=LoginResponse,
+)
 async def microsoft_callback(
     code: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
 
-    login = await AuthService.microsoft_login(
+    return await AuthService.microsoft_login(
         db=db,
         code=code,
-    )
-
-    return RedirectResponse(
-        url=(
-            f"{FRONTEND_URL}/auth/callback"
-            f"?token={login.access_token}"
-        )
     )
