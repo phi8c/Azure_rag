@@ -16,13 +16,13 @@ import json
 
 
 
-with open(
-    "mock_chunks.json",
-    "r",
-    encoding="utf-8"
-) as f:
+# with open(
+#     "mock_chunks.json",
+#     "r",
+#     encoding="utf-8"
+# ) as f:
 
-    mock_results = json.load(f)
+#     mock_results = json.load(f)
 
 
 class GraphIngestionService:
