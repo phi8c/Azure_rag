@@ -29,7 +29,11 @@ jobs:
             throw "Missing backend/requirements.lock.txt"
           }
 
-          Write-Host "Requirements lock file found."
+          if (-not (Test-Path "run_server.py")) {
+            throw "Missing backend/run_server.py"
+          }
+
+          Write-Host "Required build files found."
 
       - name: Install dependencies
         working-directory: backend
@@ -46,10 +50,10 @@ jobs:
           python -m pip check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify imports
+      - name: Verify core dependencies
         working-directory: backend
         run: |
-          python -c "import uvicorn, fastapi, duckdb; from app.main import app; print('Backend imports OK')"
+          python -c "import uvicorn, fastapi, duckdb, sqlalchemy, pydantic_settings; print('Core dependencies OK')"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build executable
@@ -59,8 +63,10 @@ jobs:
             --noconfirm `
             --clean `
             --onedir `
+            --console `
             --name AIBackend `
             --paths . `
+            --collect-submodules app `
             --collect-all uvicorn `
             --collect-all fastapi `
             --collect-all azure `
@@ -77,6 +83,17 @@ jobs:
             throw "AIBackend.exe was not generated"
           }
 
+          Write-Host "Executable generated successfully."
+
+      - name: Verify executable structure
+        working-directory: backend
+        run: |
+          if (-not (Test-Path "dist/AIBackend/_internal")) {
+            throw "PyInstaller internal dependencies directory missing"
+          }
+
+          Write-Host "Executable structure OK."
+
       - name: Create ZIP
         run: |
           Compress-Archive `
@@ -87,6 +104,9 @@ jobs:
           if (-not (Test-Path "AI-Backend-Windows.zip")) {
             throw "ZIP creation failed"
           }
+
+          $zip = Get-Item "AI-Backend-Windows.zip"
+          Write-Host "ZIP size: $($zip.Length) bytes"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
