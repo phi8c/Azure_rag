@@ -128,3 +128,21 @@ class AzureOpenAIService:
             .message.content
             or ""
         )
+
+
+#
+# Dùng chung 1 client (connection pool) cho mọi request chat
+#
+
+_shared_service: AzureOpenAIService | None = None
+
+
+def get_shared_azure_openai_service() -> AzureOpenAIService:
+
+    global _shared_service
+
+    if _shared_service is None:
+
+        _shared_service = AzureOpenAIService()
+
+    return _shared_service

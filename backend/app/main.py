@@ -94,6 +94,10 @@ from fastapi.middleware.cors import (
 
 
 
+from app.services.azure.azure_search_service import AzureSearchService
+from app.services.rag.chat_config_cache import ChatConfigCache
+from app.services.llm.azure_openai_service import get_shared_azure_openai_service
+
 from app.startup.queue_consumer import start_queue_consumers
 from app.workers.executive_data_worker import ExecutiveDataWorker
 
@@ -157,6 +161,39 @@ async def validation_exception_handler(request, exc):
         content={
             "detail": errors,
         },
+    )
+
+
+async def warm_up_chat():
+
+    #
+    # Nạp sẵn cấu hình chat + mở kết nối Azure để request đầu không bị chậm
+    #
+
+    try:
+
+        await ChatConfigCache.refresh()
+
+        await AzureSearchService.warm_up()
+
+        # Mở sẵn kết nối của client chat (không tốn token)
+        await get_shared_azure_openai_service()._client.models.list()
+
+        print("chat warm up done")
+
+    except Exception as exc:
+
+        print(
+            "chat warm up error =",
+            repr(exc),
+        )
+
+
+@app.on_event("startup")
+async def start_chat_warm_up():
+
+    asyncio.create_task(
+        warm_up_chat()
     )
 
 

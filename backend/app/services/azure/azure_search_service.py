@@ -89,6 +89,23 @@ class AzureSearchService:
 
     _async_embedding_client: AsyncAzureOpenAI | None = None
 
+    # Chỉ lấy field cần dùng; không kéo text_vector (1536 số/chunk) về
+    CHUNK_FIELDS = [
+        "chunk_id",
+        "parent_id",
+        "title",
+        "chunk",
+        "source_file",
+        "department",
+        "owner_role",
+        "security_level",
+        "document_type",
+        "sensitivity",
+        "source_url",
+        "drive_id",
+        "drive_item_id",
+    ]
+
     @classmethod
     def _get_async_search_client(cls) -> AsyncSearchClient:
 
@@ -105,6 +122,11 @@ class AzureSearchService:
     @classmethod
     def _get_async_embedding_client(cls) -> AsyncAzureOpenAI:
 
+        #
+        # Client riêng cho embedding. Dùng chung client với chat stream thì
+        # sau mỗi lượt stream, embedding phải mở lại kết nối (~1.2s thay vì ~0.4s).
+        #
+
         if cls._async_embedding_client is None:
 
             cls._async_embedding_client = AsyncAzureOpenAI(
@@ -114,6 +136,37 @@ class AzureSearchService:
             )
 
         return cls._async_embedding_client
+
+    @staticmethod
+    async def warm_up():
+
+        #
+        # Mở sẵn kết nối TLS tới Azure OpenAI và Azure Search lúc khởi động,
+        # tránh request chat đầu tiên phải chờ bắt tay (~2s).
+        #
+
+        await (
+            AzureSearchService
+            ._get_async_embedding_client()
+            .embeddings
+            .create(
+                model=settings.AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
+                input="warm up",
+            )
+        )
+
+        results = await (
+            AzureSearchService
+            ._get_async_search_client()
+            .search(
+                search_text="*",
+                filter="chunk_id eq '__warm_up__'",
+                top=1,
+            )
+        )
+
+        async for _ in results:
+            pass
 
     @staticmethod
     def _to_chunk(doc) -> dict:
@@ -180,6 +233,7 @@ class AzureSearchService:
                 vector_queries=[vector_query],
                 filter=azure_filter,
                 top=top_k,
+                select=AzureSearchService.CHUNK_FIELDS,
             )
         )
 

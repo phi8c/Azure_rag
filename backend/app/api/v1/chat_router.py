@@ -1,5 +1,3 @@
-import asyncio
-
 import json
 
 from uuid import uuid4
@@ -36,8 +34,8 @@ from app.enums.prompt_code import (
     PromptCode
 )
 
-from app.repositories.rag_config_repository import (
-    WorkspaceConfigRepository
+from app.services.rag.chat_config_cache import (
+    ChatConfigCache
 )
 
 
@@ -266,30 +264,9 @@ async def stream_chat(
     rag_service = RagService()
 
     #
-    # Retrieval (embedding + Azure Search) chạy song song
-    # với việc đọc prompt/model/config từ DB
+    # Kiểm tra trước khi stream: cấu hình đọc từ cache trong RAM
+    # (không chạm DB), nên lỗi vẫn trả 400/404 mà gần như không tốn thời gian.
     #
-
-    retrieval_task = None
-
-    if not is_public:
-
-        top_k = await (
-            WorkspaceConfigRepository
-            .get_top_k_by_workspace_code(
-                db=db,
-                workspace_code=workspace_code,
-            )
-        ) or default_top_k
-
-        retrieval_task = asyncio.create_task(
-            retrieve(
-                question=body.question,
-                top_k=top_k,
-                user_object_id=body.microsoft_object_id,
-                group_ids=body.group_ids,
-            )
-        )
 
     try:
 
@@ -300,11 +277,12 @@ async def stream_chat(
             workspace_code=workspace_code,
         )
 
-        chunks = (
-            await retrieval_task
-            if retrieval_task is not None
-            else []
-        )
+        if not is_public:
+
+            AzureSearchService.build_acl_filter(
+                user_object_id=body.microsoft_object_id,
+                group_ids=body.group_ids,
+            )
 
     except ValueError as exc:
 
@@ -320,28 +298,56 @@ async def stream_chat(
             detail=str(exc),
         ) from exc
 
-    finally:
-
-        if retrieval_task is not None and not retrieval_task.done():
-
-            retrieval_task.cancel()
-
-    sources = (
-        None
-        if is_public
-        else build_internal_sources(chunks)
+    top_k = (
+        await ChatConfigCache.get_top_k(workspace_code)
+        or default_top_k
     )
 
     async def stream_response():
 
         raw_answer = ""
         full_answer = ""
-        final_sources = sources
+        chunks = []
+        final_sources = None
         public_parser = (
             PublicAnswerStreamParser()
             if is_public
             else None
         )
+
+        #
+        # Retrieval chạy bên trong stream để header HTTP được trả ngay
+        #
+
+        if not is_public:
+
+            try:
+
+                chunks = await retrieve(
+                    question=body.question,
+                    top_k=top_k,
+                    user_object_id=body.microsoft_object_id,
+                    group_ids=body.group_ids,
+                )
+
+            except Exception as exc:
+
+                print(
+                    "chat retrieval error =",
+                    repr(exc),
+                )
+
+                yield sse_event(
+                    "error",
+                    {
+                        "conversation_id": conversation_id,
+                        "message": "Failed to retrieve documents.",
+                    },
+                )
+
+                return
+
+            final_sources = build_internal_sources(chunks)
 
         yield sse_event(
             "metadata",

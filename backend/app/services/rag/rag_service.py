@@ -5,23 +5,15 @@ from app.enums.prompt_code import (
     PromptCode,
 )
 
-from app.repositories.ai_model_repository import (
-    AIModelRepository,
-)
-
-from app.repositories.ai_prompt_repository import (
-    AIPromptRepository,
-)
-
 from app.services.llm.azure_openai_service import (
-    AzureOpenAIService,
+    get_shared_azure_openai_service,
 )
 
 from app.services.session_memory.session_memory_service import (
     SessionMemoryService,
 )
 
-from app.repositories.rag_config_repository import WorkspaceConfigRepository
+from app.services.rag.chat_config_cache import ChatConfigCache
 
 
 CHAT_MODES = (
@@ -30,29 +22,11 @@ CHAT_MODES = (
     PromptCode.COMBINE,
 )
 
-#
-# Dùng chung 1 Azure OpenAI client (connection pool) cho mọi request
-#
-
-_shared_llm: AzureOpenAIService | None = None
-
-
-def _get_shared_llm() -> AzureOpenAIService:
-
-    global _shared_llm
-
-    if _shared_llm is None:
-
-        _shared_llm = AzureOpenAIService()
-
-    return _shared_llm
-
-
 class RagService:
 
     def __init__(self):
 
-        self.llm = _get_shared_llm()
+        self.llm = get_shared_azure_openai_service()
 
     async def ask(
         self,
@@ -126,39 +100,38 @@ class RagService:
         workspace_code: str,
     ) -> dict:
 
+        #
+        # Đọc từ cache trong RAM, không chạm DB ở đường nóng.
+        # Tham số db giữ lại để không đổi chữ ký hàm.
+        #
+
         if mode not in CHAT_MODES:
 
             raise ValueError("Invalid chat mode.")
 
-        prompt = await AIPromptRepository.get_by_code(
-            db=db,
-            code=mode,
+        system_prompt = await ChatConfigCache.lookup(
+            "prompts",
+            mode.value,
         )
 
-        if prompt is None:
+        if system_prompt is None:
 
             raise LookupError("Prompt not found.")
 
-        model = await (
-            AIModelRepository
-            .get_by_id(
-                db=db,
-                id=model_id,
-            )
+        model_name = await ChatConfigCache.lookup(
+            "models",
+            str(model_id),
         )
 
-        if model is None:
+        if model_name is None:
 
             raise LookupError(
                 "AI Model not found."
             )
 
-        model_config = await (
-            WorkspaceConfigRepository
-            .get_model_config_by_workspace_code(
-                db=db,
-                workspace_code=workspace_code,
-            )
+        model_config = await ChatConfigCache.lookup(
+            "model_configs",
+            workspace_code,
         )
 
         if model_config is None:
@@ -168,14 +141,10 @@ class RagService:
             )
 
         return {
-            "model": model.model_name,
-            "system_prompt": prompt.system_prompt,
-            "temperature": float(
-                model_config.temperature
-            ),
-            "max_tokens": int(
-                model_config.max_tokens
-            ),
+            "model": model_name,
+            "system_prompt": system_prompt,
+            "temperature": model_config["temperature"],
+            "max_tokens": model_config["max_tokens"],
         }
 
     @staticmethod

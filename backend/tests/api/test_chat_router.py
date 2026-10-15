@@ -75,8 +75,8 @@ class ChatRouterTest(unittest.TestCase):
 
         self.patches = [
             patch.object(
-                chat_router.WorkspaceConfigRepository,
-                "get_top_k_by_workspace_code",
+                chat_router.ChatConfigCache,
+                "get_top_k",
                 AsyncMock(return_value=7),
             ),
             patch.object(
@@ -149,7 +149,7 @@ class ChatRouterTest(unittest.TestCase):
         self.assert_no_db_writes()
 
     def test_helpdesk_uses_default_top_k_when_config_missing(self):
-        chat_router.WorkspaceConfigRepository.get_top_k_by_workspace_code.return_value = None
+        chat_router.ChatConfigCache.get_top_k.return_value = None
 
         with patch.object(
             AzureSearchService, "retrieve_helpdesk", AsyncMock(return_value=[])
@@ -210,6 +210,31 @@ class ChatRouterTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_empty_object_id_returns_400_before_stream(self):
+        with patch.object(AzureSearchService, "retrieve", AsyncMock()) as retrieve:
+            response = self.client.post(
+                "/chat/query",
+                json=body(microsoft_object_id="  "),
+            )
+
+        self.assertEqual(response.status_code, 400)
+        retrieve.assert_not_called()
+
+    def test_retrieval_failure_emits_error_event(self):
+        with patch.object(
+            AzureSearchService,
+            "retrieve",
+            AsyncMock(side_effect=RuntimeError("search down")),
+        ):
+            response = self.client.post("/chat/query", json=body())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [e[0] for e in parse_sse(response.text)],
+            ["error"],
+        )
+        self.assertEqual(self.llm_messages, [])
+
     def test_llm_failure_emits_error_event(self):
         async def broken(model, messages, temperature, max_completion_tokens):
             yield "Partial"
@@ -267,9 +292,80 @@ class SearchTopKTest(unittest.IsolatedAsyncioTestCase):
         search_kwargs = search_client.search.await_args.kwargs
         self.assertEqual(search_kwargs["search_text"], "VPN lỗi")
         self.assertEqual(search_kwargs["top"], 5)
+        self.assertNotIn("text_vector", search_kwargs["select"])
+        self.assertIn("chunk", search_kwargs["select"])
         self.assertEqual(search_kwargs["vector_queries"][0].k_nearest_neighbors, 5)
         self.assertTrue(search_kwargs["filter"].startswith("(workspace eq 'HELPDESK') and ("))
         self.assertIn("allowed_user_ids/any(u: u eq 'u1')", search_kwargs["filter"])
+
+
+class ChatConfigCacheTest(unittest.IsolatedAsyncioTestCase):
+
+    DATA = {
+        "prompts": {"INTERNAL": "Context: {{context}}"},
+        "models": {"22222222-2222-2222-2222-222222222222": "gpt-5.1"},
+        "model_configs": {"CHAT_RAG": {"temperature": 1.0, "max_tokens": 2000}},
+        "top_k": {"CHAT_RAG": 10},
+    }
+
+    def setUp(self):
+        self.cache = chat_router.ChatConfigCache
+        self.cache.invalidate()
+        self.cache._lock = None
+        self.cache._refresh_task = None
+
+    def tearDown(self):
+        self.cache.invalidate()
+
+    async def test_load_chat_config_reads_cache_once(self):
+        from app.enums.prompt_code import PromptCode
+
+        load = AsyncMock(return_value=self.DATA)
+
+        with patch.object(self.cache, "_load", load):
+            for _ in range(3):
+                config = await RagService().load_chat_config(
+                    db=None,
+                    model_id="22222222-2222-2222-2222-222222222222",
+                    mode=PromptCode.INTERNAL,
+                    workspace_code="CHAT_RAG",
+                )
+
+        self.assertEqual(load.await_count, 1)
+        self.assertEqual(config["model"], "gpt-5.1")
+        self.assertEqual(config["max_tokens"], 2000)
+        self.assertEqual(await self.cache.get_top_k("CHAT_RAG"), 10)
+
+    async def test_unknown_model_refreshes_at_most_once_then_404(self):
+        from app.enums.prompt_code import PromptCode
+
+        load = AsyncMock(return_value=self.DATA)
+
+        with patch.object(self.cache, "_load", load):
+            for _ in range(3):
+                with self.assertRaises(LookupError):
+                    await RagService().load_chat_config(
+                        db=None,
+                        model_id="33333333-3333-3333-3333-333333333333",
+                        mode=PromptCode.INTERNAL,
+                        workspace_code="CHAT_RAG",
+                    )
+
+        # 1 lần load đầu, các lần miss tiếp theo nằm trong MIN_REFRESH_SECONDS
+        self.assertEqual(load.await_count, 1)
+
+    async def test_expired_cache_returns_stale_and_refreshes_in_background(self):
+        new_data = {**self.DATA, "top_k": {"CHAT_RAG": 5}}
+        load = AsyncMock(side_effect=[self.DATA, new_data])
+
+        with patch.object(self.cache, "_load", load):
+            self.assertEqual(await self.cache.get_top_k("CHAT_RAG"), 10)
+            self.cache._loaded_at -= self.cache.TTL_SECONDS + 1
+
+            self.assertEqual(await self.cache.get_top_k("CHAT_RAG"), 10)
+            await self.cache._refresh_task
+
+            self.assertEqual(await self.cache.get_top_k("CHAT_RAG"), 5)
 
 
 if __name__ == "__main__":
