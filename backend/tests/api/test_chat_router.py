@@ -299,6 +299,83 @@ class SearchTopKTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("allowed_user_ids/any(u: u eq 'u1')", search_kwargs["filter"])
 
 
+class RetrieveFullDocumentTest(unittest.IsolatedAsyncioTestCase):
+
+    def make_clients(self, *search_results):
+        embeddings = MagicMock()
+        embeddings.embeddings.create = AsyncMock(
+            return_value=SimpleNamespace(
+                data=[SimpleNamespace(embedding=[0.1, 0.2])]
+            )
+        )
+
+        def as_async(docs):
+            async def gen():
+                for doc in docs:
+                    yield doc
+            return gen()
+
+        search_client = MagicMock()
+        search_client.search = AsyncMock(
+            side_effect=[as_async(docs) for docs in search_results]
+        )
+        return embeddings, search_client
+
+    async def retrieve(self, embeddings, search_client):
+        with patch.object(
+            AzureSearchService, "_get_async_embedding_client", return_value=embeddings
+        ), patch.object(
+            AzureSearchService, "_get_async_search_client", return_value=search_client
+        ):
+            return await AzureSearchService.retrieve(
+                question="Hợp đồng BĐS",
+                top_k=10,
+                user_object_id="u1",
+                group_ids=["g1"],
+            )
+
+    async def test_top1_chunk_then_whole_document_with_best_first(self):
+        best = {"@search.score": 0.9, "chunk_id": "c2", "parent_id": "doc-1", "chunk": "B", "source_file": "a.docx"}
+        document = [
+            {"@search.score": 1.0, "chunk_id": "c1", "parent_id": "doc-1", "chunk": "A", "source_file": "a.docx"},
+            {"@search.score": 1.0, "chunk_id": "c2", "parent_id": "doc-1", "chunk": "B", "source_file": "a.docx"},
+            {"@search.score": 1.0, "chunk_id": "c3", "parent_id": "doc-1", "chunk": "C", "source_file": "a.docx"},
+        ]
+        embeddings, search_client = self.make_clients([best], document)
+
+        chunks = await self.retrieve(embeddings, search_client)
+
+        self.assertEqual([c["chunk_id"] for c in chunks], ["c2", "c1", "c3"])
+        self.assertEqual(chunks[0]["score"], 0.9)
+        self.assertIsNone(chunks[1]["score"])
+        embeddings.embeddings.create.assert_awaited_once()
+
+        first, second = [c.kwargs for c in search_client.search.await_args_list]
+        self.assertEqual(first["top"], 1)
+        self.assertEqual(first["vector_queries"][0].k_nearest_neighbors, 10)
+        self.assertEqual(second["search_text"], "*")
+        self.assertNotIn("vector_queries", second)
+        self.assertEqual(second["top"], AzureSearchService.MAX_DOCUMENT_CHUNKS)
+        self.assertTrue(second["filter"].startswith("(parent_id eq 'doc-1') and ("))
+        self.assertIn("allowed_group_ids/any(g: g eq 'g1')", second["filter"])
+        self.assertNotIn("text_vector", second["select"])
+
+    async def test_no_match_returns_empty_without_second_search(self):
+        embeddings, search_client = self.make_clients([])
+
+        self.assertEqual(await self.retrieve(embeddings, search_client), [])
+        self.assertEqual(search_client.search.await_count, 1)
+
+    async def test_parent_id_is_escaped(self):
+        best = {"chunk_id": "c1", "parent_id": "o'brien", "chunk": "A"}
+        embeddings, search_client = self.make_clients([best], [best])
+
+        await self.retrieve(embeddings, search_client)
+
+        second = search_client.search.await_args_list[1].kwargs
+        self.assertTrue(second["filter"].startswith("(parent_id eq 'o''brien')"))
+
+
 class ChatConfigCacheTest(unittest.IsolatedAsyncioTestCase):
 
     DATA = {

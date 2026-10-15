@@ -81,13 +81,18 @@ class AzureSearchService:
     
     
     # ------------------------------------------------------------
-    # Chat retrieval: embed câu hỏi -> hybrid search -> top k chunk.
+    # Chat retrieval:
+    # - /chat/query: chunk khớp nhất -> toàn bộ chunk của document đó.
+    # - /chat/helpdesk: top k chunk.
     # Client async được tạo 1 lần và dùng chung cho mọi request.
     # ------------------------------------------------------------
 
     _async_search_client: AsyncSearchClient | None = None
 
     _async_embedding_client: AsyncAzureOpenAI | None = None
+
+    # Giới hạn số chunk khi lấy cả document (như logic cũ)
+    MAX_DOCUMENT_CHUNKS = 1000
 
     # Chỉ lấy field cần dùng; không kéo text_vector (1536 số/chunk) về
     CHUNK_FIELDS = [
@@ -195,6 +200,7 @@ class AzureSearchService:
         user_object_id: str,
         group_ids: list[str],
         workspace: str | None = None,
+        top: int | None = None,
     ) -> list[dict]:
 
         azure_filter = AzureSearchService.build_acl_filter(
@@ -232,7 +238,7 @@ class AzureSearchService:
                 search_text=question,
                 vector_queries=[vector_query],
                 filter=azure_filter,
-                top=top_k,
+                top=top or top_k,
                 select=AzureSearchService.CHUNK_FIELDS,
             )
         )
@@ -250,12 +256,73 @@ class AzureSearchService:
         group_ids: list[str],
     ):
 
-        return await AzureSearchService.search_top_k(
+        #
+        # 1) Tìm chunk khớp nhất (hybrid, vector k = top_k, chỉ lấy 1 kết quả)
+        #
+
+        best_chunks = await AzureSearchService.search_top_k(
             question=question,
             top_k=top_k,
             user_object_id=user_object_id,
             group_ids=group_ids,
+            top=1,
         )
+
+        if not best_chunks:
+
+            return []
+
+        best = best_chunks[0]
+
+        if not best.get("parent_id"):
+
+            return best_chunks
+
+        #
+        # 2) Lấy toàn bộ chunk của document chứa chunk đó.
+        #    Chỉ lọc (không chấm điểm), không kéo text_vector về.
+        #
+
+        acl_filter = AzureSearchService.build_acl_filter(
+            user_object_id=user_object_id,
+            group_ids=group_ids,
+        )
+
+        escaped_parent_id = AzureSearchService._escape_odata_value(
+            str(best["parent_id"])
+        )
+
+        results = await (
+            AzureSearchService
+            ._get_async_search_client()
+            .search(
+                search_text="*",
+                filter=(
+                    f"(parent_id eq '{escaped_parent_id}') "
+                    f"and ({acl_filter})"
+                ),
+                top=AzureSearchService.MAX_DOCUMENT_CHUNKS,
+                select=AzureSearchService.CHUNK_FIELDS,
+            )
+        )
+
+        other_chunks = []
+
+        async for doc in results:
+
+            if doc.get("chunk_id") == best["chunk_id"]:
+                continue
+
+            chunk = AzureSearchService._to_chunk(doc)
+            chunk["score"] = None
+            other_chunks.append(chunk)
+
+        #
+        # Index không có thứ tự chunk trong tài liệu,
+        # nên đặt chunk khớp nhất lên đầu context.
+        #
+
+        return [best] + other_chunks
 
     @staticmethod
     def retrieve_contract_policy(
