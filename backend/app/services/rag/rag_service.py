@@ -21,14 +21,38 @@ from app.services.session_memory.session_memory_service import (
     SessionMemoryService,
 )
 
-from app.enums.prompt_code import ( PromptCode)
 from app.repositories.rag_config_repository import WorkspaceConfigRepository
+
+
+CHAT_MODES = (
+    PromptCode.PUBLIC,
+    PromptCode.INTERNAL,
+    PromptCode.COMBINE,
+)
+
+#
+# Dùng chung 1 Azure OpenAI client (connection pool) cho mọi request
+#
+
+_shared_llm: AzureOpenAIService | None = None
+
+
+def _get_shared_llm() -> AzureOpenAIService:
+
+    global _shared_llm
+
+    if _shared_llm is None:
+
+        _shared_llm = AzureOpenAIService()
+
+    return _shared_llm
 
 
 class RagService:
 
     def __init__(self):
-        self.llm = AzureOpenAIService()
+
+        self.llm = _get_shared_llm()
 
     async def ask(
         self,
@@ -40,65 +64,10 @@ class RagService:
         mode: PromptCode,
         workspace_code: str,
     ):
-        chat_params = await self._build_chat_params(
-            db=db,
-            conversation_id=conversation_id,
-            question=question,
-            chunks=chunks,
-            model_id=model_id,
-            mode=mode,
-            workspace_code=workspace_code,
-        )
-        
 
-        answer = await self.llm.chat(
-            model=chat_params["model"],
-            messages=chat_params["messages"],
-            temperature=chat_params["temperature"],
-            max_completion_tokens=chat_params["max_tokens"],
-        )
-
-        return answer
-
-    async def ask_stream(
-        self,
-        db,
-        conversation_id: UUID,
-        question: str,
-        chunks: list,
-        model_id: UUID,
-        mode: PromptCode,
-        workspace_code: str,
-    ) -> AsyncIterator[str]:
-
-        chat_params = await self._build_chat_params(
-            db=db,
-            conversation_id=conversation_id,
-            question=question,
-            chunks=chunks,
-            model_id=model_id,
-            mode=mode,
-            workspace_code=workspace_code,
-        )
-
-        async for token in self.llm.chat_stream(
-            model=chat_params["model"],
-            messages=chat_params["messages"],
-            temperature=chat_params["temperature"],
-            max_completion_tokens=chat_params["max_tokens"],
-        ):
-            yield token
-
-    async def _build_chat_params(
-        self,
-        db,
-        conversation_id: UUID,
-        question: str,
-        chunks: list,
-        model_id: UUID,
-        mode: PromptCode,
-        workspace_code: str,
-    ):
+        #
+        # Teams bot vẫn dùng history hội thoại
+        #
 
         history = await (
             SessionMemoryService
@@ -108,13 +77,58 @@ class RagService:
             )
         )
 
-        if mode not in [
-            PromptCode.PUBLIC,
-            PromptCode.INTERNAL,
-            PromptCode.COMBINE,
-        ]:
+        chat_config = await self.load_chat_config(
+            db=db,
+            model_id=model_id,
+            mode=mode,
+            workspace_code=workspace_code,
+        )
 
-            raise Exception("Invalid chat mode.")
+        answer = await self.llm.chat(
+            model=chat_config["model"],
+            messages=self.build_messages(
+                chat_config=chat_config,
+                question=question,
+                chunks=chunks,
+                history=history,
+            ),
+            temperature=chat_config["temperature"],
+            max_completion_tokens=chat_config["max_tokens"],
+        )
+
+        return answer
+
+    async def ask_stream(
+        self,
+        chat_config: dict,
+        question: str,
+        chunks: list,
+    ) -> AsyncIterator[str]:
+
+        async for token in self.llm.chat_stream(
+            model=chat_config["model"],
+            messages=self.build_messages(
+                chat_config=chat_config,
+                question=question,
+                chunks=chunks,
+            ),
+            temperature=chat_config["temperature"],
+            max_completion_tokens=chat_config["max_tokens"],
+        ):
+
+            yield token
+
+    async def load_chat_config(
+        self,
+        db,
+        model_id: UUID,
+        mode: PromptCode,
+        workspace_code: str,
+    ) -> dict:
+
+        if mode not in CHAT_MODES:
+
+            raise ValueError("Invalid chat mode.")
 
         prompt = await AIPromptRepository.get_by_code(
             db=db,
@@ -122,7 +136,8 @@ class RagService:
         )
 
         if prompt is None:
-            raise Exception("Prompt not found.")
+
+            raise LookupError("Prompt not found.")
 
         model = await (
             AIModelRepository
@@ -133,42 +148,10 @@ class RagService:
         )
 
         if model is None:
-            raise Exception(
+
+            raise LookupError(
                 "AI Model not found."
             )
-
-        contexts = []
-
-        for chunk in chunks:
-
-            contexts.append(
-                chunk["content"]
-            )
-
-        context = "\n\n".join(contexts)
-
-        system_prompt = (
-            prompt.system_prompt
-            .replace(
-                "{{history}}",
-                history or "",
-            )
-            .replace(
-                "{{context}}",
-                context,
-            )
-        )
-
-        messages = [
-            {
-                "role": "system",
-                "content": system_prompt,
-            },
-            {
-                "role": "user",
-                "content": question,
-            },
-        ]
 
         model_config = await (
             WorkspaceConfigRepository
@@ -178,9 +161,15 @@ class RagService:
             )
         )
 
+        if model_config is None:
+
+            raise LookupError(
+                "Model config not found."
+            )
+
         return {
             "model": model.model_name,
-            "messages": messages,
+            "system_prompt": prompt.system_prompt,
             "temperature": float(
                 model_config.temperature
             ),
@@ -188,3 +177,44 @@ class RagService:
                 model_config.max_tokens
             ),
         }
+
+    @staticmethod
+    def build_messages(
+        chat_config: dict,
+        question: str,
+        chunks: list,
+        history: str = "",
+    ) -> list[dict]:
+
+        context = "\n\n".join(
+            chunk["content"]
+            for chunk in chunks
+            if chunk.get("content")
+        )
+
+        system_prompt = (
+            chat_config["system_prompt"]
+            .replace(
+                "{{history}}",
+                history or "",
+            )
+            .replace(
+                "{{context}}",
+                context,
+            )
+            .replace(
+                "{{question}}",
+                question,
+            )
+        )
+
+        return [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": question,
+            },
+        ]
