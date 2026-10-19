@@ -1,493 +1,84 @@
-from fastapi import (
-    APIRouter,
-    Depends
-)
-
-from sqlalchemy.ext.asyncio import (
-    AsyncSession
-)
-
-from app.core.database import (
-    get_db
-)
-
-from app.repositories.role_repository import (
-    RoleRepository
-)
-
-from app.core.settings import (
-    settings
-)
-
-from app.services.conversation.conversation_service import (
-    ConversationService
-)
-
-from app.repositories.permission_repository import (
-    PermissionRepository
-)
-
-from app.services.session_memory.session_memory_service import (
-    SessionMemoryService
-)
-
-from app.services.rewrite_service.query_rewrite_service import (
-    QueryRewriteService
-)
-
-from app.services.azure.azure_search_service import (
-    AzureSearchService
-)
-
-from app.services.message.message_service import (
-    MessageService
-)
-
-from app.services.rag.rag_service import (
-    RagService
-)
-
-from app.services.session_memory.conversation_summary_service import (
-    ConversationSummaryService
-)
-
+"""Teams adapter without database conversations, message storage or query rewriting."""
 
 import httpx
-import json
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.core.settings import settings
+from app.enums.prompt_code import PromptCode
+from app.services.azure.azure_search_service import AzureSearchService
+from app.services.rag.chat_config_cache import ChatConfigCache
+from app.services.rag.rag_service import RagService
 
 
-router = APIRouter(
-    prefix="/bot",
-    tags=["Bot"]
-)
+router = APIRouter(prefix="/bot", tags=["Bot"])
+
+
+async def get_token(client: httpx.AsyncClient, client_id: str, secret: str, scope: str):
+    response = await client.post(
+        f"https://login.microsoftonline.com/{settings.AZURE_TENANT_ID}/oauth2/v2.0/token",
+        data={
+            "client_id": client_id, "client_secret": secret,
+            "scope": scope, "grant_type": "client_credentials",
+        },
+    )
+    response.raise_for_status()
+    return response.json()["access_token"]
 
 
 @router.post("/messages")
-async def teams_message(
+async def teams_message(body: dict, db: AsyncSession = Depends(get_db)):
+    question = body.get("text", "").strip()
+    object_id = body.get("from", {}).get("aadObjectId")
+    model_id = body.get("model_id") or body.get("channelData", {}).get("model_id")
+    service_url = body.get("serviceUrl")
+    conversation_id = body.get("conversation", {}).get("id")
+    if not all((question, object_id, model_id, service_url, conversation_id)):
+        raise HTTPException(400, "text, from.aadObjectId, model_id, serviceUrl and conversation.id are required")
 
-    body: dict,
-
-    db: AsyncSession =
-    Depends(get_db)
-
-):
-
-    print(
-        "\n========== TEAMS ==========\n"
-    )
-
-    print(
-        json.dumps(
-            body,
-            indent=2,
-            ensure_ascii=False
+    rag = RagService()
+    try:
+        # Validate configuration before retrieval or sending a Teams reply.
+        await rag.load_chat_config(
+            db=db, model_id=model_id, mode=PromptCode.INTERNAL,
+            workspace_code=PromptCode.CHAT_RAG.value,
         )
-    )
+    except (ValueError, LookupError) as exc:
+        raise HTTPException(400, str(exc)) from exc
 
-    question = (
-        body.get(
-            "text",
-            ""
+    async with httpx.AsyncClient(timeout=30) as client:
+        graph_token = await get_token(
+            client, settings.AZURE_CLIENT_ID, settings.AZURE_CLIENT_SECRET,
+            "https://graph.microsoft.com/.default",
         )
-    )
+        group_ids = []
+        url = f"https://graph.microsoft.com/v1.0/users/{object_id}/transitiveMemberOf/microsoft.graph.group?$select=id"
+        while url:
+            response = await client.get(url, headers={"Authorization": f"Bearer {graph_token}"})
+            response.raise_for_status()
+            data = response.json()
+            group_ids.extend(group["id"] for group in data.get("value", []))
+            url = data.get("@odata.nextLink")
 
-    conversation_id = (
-        body
-        .get("conversation", {})
-        .get("id")
-    )
-
-    aad_object_id = (
-        body
-        .get("from", {})
-        .get("aadObjectId")
-    )
-
-    print(
-        "question =",
-        question
-    )
-
-    print(
-        "conversation_id =",
-        conversation_id
-    )
-
-    print(
-        "aad_object_id =",
-        aad_object_id
-    )
-
-    if not aad_object_id:
-
-        print(
-            "aadObjectId not found"
-        )
-
-        return {
-            "status": "error"
-        }
-
-    async with httpx.AsyncClient() as client:
-
-        # ====================
-        # TOKEN
-        # ====================
-
-        token_response = await client.post(
-            f"https://login.microsoftonline.com/{settings.AZURE_TENANT_ID}/oauth2/v2.0/token",
-            data={
-                "client_id":
-                settings.AZURE_CLIENT_ID,
-
-                "client_secret":
-                settings.AZURE_CLIENT_SECRET,
-
-                "scope":
-                "https://graph.microsoft.com/.default",
-
-                "grant_type":
-                "client_credentials"
-            }
-        )
-
-        token_data = (
-            token_response.json()
-        )
-
-        access_token = (
-            token_data.get(
-                "access_token"
-            )
-        )
-
-        print(
-            "token_ok =",
-            bool(access_token)
-        )
-
-        headers = {
-            "Authorization":
-            f"Bearer {access_token}"
-        }
-
-        # ====================
-        # USER
-        # ====================
-
-        user_response = await client.get(
-            f"https://graph.microsoft.com/v1.0/users/{aad_object_id}",
-            headers=headers
-        )
-
-        user_data = (
-            user_response.json()
-        )
-
-        print(
-            "user =",
-            user_data
-        )
-
-        email = (
-            user_data.get(
-                "mail"
-            )
-            or
-            user_data.get(
-                "userPrincipalName"
-            )
-        )
-
-        print(
-            "email =",
-            email
-        )
-
-        # ====================
-        # GROUPS
-        # ====================
-
-        group_response = await client.get(
-            f"https://graph.microsoft.com/v1.0/users/{aad_object_id}/memberOf?$select=displayName",
-            headers=headers
-        )
-
-        group_data = (
-            group_response.json()
-        )
-
-        print(
-            "groups =",
-            group_data
-        )
-
-        groups = (
-            group_data.get(
-                "value",
-                []
-            )
-        )
-
-        group_names = [
-
-            group.get(
-                "displayName",
-                ""
-            )
-
-            for group
-            in groups
-        ]
-
-        print(
-            "group_names =",
-            group_names
-        )
-
-    # ====================
-    # ROLE MATCH
-    # ====================
-
-    role_names = await (
-            RoleRepository
-            .get_role_names(
-                db=db
-            )
-        )
-
-    role = next(
-        (
-            group
-            for group
-            in group_names
-            if group in role_names
-        ),
-        None
-    )
-
-    if not role:
-
-        return {
-            "status": "error",
-            "message": "role not found"
-        }
-
-
-    conversation = await (
-        ConversationService
-        .get_or_create_by_email(
-            db=db,
-            email=email
-        )
-    )
-
-    conversation_id = str(
-        conversation.id
-    )
-
-    print(
-        "conversation_id =",
-        conversation_id
-    )
-
-
-    permissions = await (
-        PermissionRepository
-        .get_role_access(
-            db,
-            role
-        )
-    )
-
-    print(
-        "permissions =",
-        permissions
-    )
-
-
-    history = await (
-        SessionMemoryService
-        .build_context(
-            db=db,
-            conversation_id=conversation_id
-        )
-    )
-
-    print(
-        "history =",
-        history
-    )
-
-
-    retrieval_query = await (
-        QueryRewriteService
-        .rewrite(
-            history=history,
-            question=question
-        )
-    )
-
-    print(
-        "retrieval_query =",
-        retrieval_query
-    )
-
-
-    chunks = (
-        AzureSearchService
-        .retrieve(
+        chunks = await AzureSearchService.retrieve(
             question=question,
-            permissions=permissions
+            top_k=await ChatConfigCache.get_top_k(PromptCode.CHAT_RAG.value) or 10,
+            user_object_id=object_id, group_ids=group_ids,
         )
-    )
-
-    print(
-        "chunks =",
-        chunks
-    )
-
-
-    await (
-        MessageService
-        .create(
-            db,
-            {
-                "conversation_id":
-                conversation_id,
-
-                "role":
-                "user",
-
-                "content":
-                question
-            }
+        answer = await rag.ask(
+            db=db, question=question,
+            chunks=chunks, model_id=model_id, mode=PromptCode.INTERNAL,
+            workspace_code=PromptCode.CHAT_RAG.value,
         )
-    )
-
-
-    answer = await (
-        RagService()
-        .ask(
-            db=db,
-            conversation_id=conversation_id,
-            question=question,
-            chunks=chunks
+        bot_token = await get_token(
+            client, settings.BOT_APP_ID, settings.BOT_APP_SECRET,
+            "https://api.botframework.com/.default",
         )
-    )
-
-    print(
-        "answer =",
-        answer
-    )
-    
-    service_url = body.get(
-    "serviceUrl"
-    )
-
-    teams_conversation_id = (
-        body
-        .get("conversation", {})
-        .get("id")
-    )
-
-    print(
-        "service_url =",
-        service_url
-    )
-
-    print(
-        "teams_conversation_id =",
-        teams_conversation_id
-    )
-    
-    async with httpx.AsyncClient() as bot_client:
-
-        bot_token_response = await bot_client.post(
-            f"https://login.microsoftonline.com/{settings.AZURE_TENANT_ID}/oauth2/v2.0/token",
-            data={
-                "grant_type":
-                "client_credentials",
-
-                "client_id":
-                settings.BOT_APP_ID,
-
-                "client_secret":
-                settings.BOT_APP_SECRET,
-
-                "scope":
-                "https://api.botframework.com/.default"
-            }
+        response = await client.post(
+            f"{service_url.rstrip('/')}/v3/conversations/{conversation_id}/activities",
+            headers={"Authorization": f"Bearer {bot_token}"},
+            json={"type": "message", "text": answer},
         )
-
-        bot_access_token = (
-            bot_token_response
-            .json()
-            .get(
-                "access_token"
-            )
-        )
-        print(
-            bot_token_response.json()
-        )
-
-        reply_response = await bot_client.post(
-            f"{service_url}/v3/conversations/{teams_conversation_id}/activities",
-            headers={
-                "Authorization":
-                f"Bearer {bot_access_token}",
-
-                "Content-Type":
-                "application/json"
-            },
-            json={
-                "type":
-                "message",
-
-                "text":
-                answer
-            }
-        )
-
-        print(
-            "reply_status =",
-            reply_response.status_code
-        )
-
-        print(
-            "reply_text =",
-            reply_response.text
-        )
-
-    await (
-        MessageService
-        .create(
-            db,
-            {
-                "conversation_id":
-                conversation_id,
-
-                "role":
-                "assistant",
-
-                "content":
-                answer
-            }
-        )
-    )
-
-
-    await (
-        ConversationSummaryService
-        .update_summary(
-            db=db,
-            conversation_id=conversation_id
-        )
-    )
-
-
-    return {
-    "type": "message",
-    "text": "Hello Teams"
-}
-    
+        response.raise_for_status()
+    return {"type": "message", "text": answer}

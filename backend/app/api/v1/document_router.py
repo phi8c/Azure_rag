@@ -5,9 +5,7 @@ from fastapi import (
     Form,
     HTTPException,
     Depends,
-    Request
 )
-import asyncio
 from uuid import UUID
 from pydantic import BaseModel
 from app.services.azure.preview_document_service import (
@@ -39,26 +37,12 @@ from app.services.sharepoint.sharepoint_service import (
     SharePointService
 )
 
-from app.repositories.chunk_repository import (
-    ChunkRepository
-)
-
-from app.services.ingestion.chunk_processor import (
-    ChunkProcessor
-)
-
-from app.repositories.azure_chunk_repository import (
-    AzureChunkRepository
-)
 
 from app.repositories.workspace_source_config_repository import (
     WorkspaceSourceConfigRepository )
 
 from app.services.delta.delta_service import (
    DeltaService
-)
-from app.services.knowledge.graph_ingestion_service import (
-    GraphIngestionService
 )
 
 from app.services.task.tracking_task_service import ( TrackingTaskService )
@@ -67,12 +51,6 @@ from app.services.sharepoint.azure_project_tracking_service import AzureProjectT
 from app.services.sharepoint.project_tracking_reader_service import ProjectTrackingReaderService
 from app.services.sharepoint.project_tracking_sync_service import ProjectTrackingSyncService
 
-from app.core.database import (
-    get_db,
-    AsyncSessionLocal
-)
-
-import json
 
 from app.schemas.tracking_chat_request import TrackingChatRequest
 from app.services.govern.executive_data_sync_service import ExecutiveDataSyncService
@@ -370,183 +348,11 @@ async def sync_status():
     }
     
     
-@router.post(
-    "/sync-completed"
-)
-async def sync_completed(
-    
-    request: Request,
-
-
-):
-
-    print(
-        "INGEST COMPLETED"
-    )
-    
-    
-    body = await request.json()
-
-    parent_id = body.get(
-        "parent_id"
-    )
-
-    asyncio.create_task(
-
-        run_post_ingestion_pipeline(
-          
-            parent_id
-        )
-
-    )
-
-    return {
-
-        "status":
-        "accepted"
-
-    }
-    
-    
-    
-async def run_post_ingestion_pipeline(
-    
-    parent_id: str
-):
-    
-    async with (
-        AsyncSessionLocal()
-    ) as db:
-    
-    
-
-        open(
-            "review_chunks.json",
-            "w",
-            encoding="utf-8"
-        ).close()
-
-        chunks = (
-
-            ChunkRepository
-            .get_unprocessed_chunks(parent_id)
-
-        )
-        title = chunks[0]["title"]
-
-        for chunk in chunks:
-
-            await (
-
-                ChunkProcessor
-                .process_chunk(
-
-                    db=db,
-
-                    chunk=chunk
-
-                )
-
-            )
-
-        updated = 0
-
-        with open(
-            "review_chunks.json",
-            encoding="utf-8"
-        ) as f:
-
-            for line in f:
-
-                row = json.loads(
-                    line
-                )
-                
-                try:
-
-                    sensitivity = int(
-                        row["sensitivity"]
-                    )
-
-                    if sensitivity not in [
-                        1,
-                        2,
-                        3
-                    ]:
-
-                        sensitivity = 2
-
-                except:
-
-                    sensitivity = 2
-
-                try:
-
-                    AzureChunkRepository\
-                    .update_sensitivity(
-
-                        chunk_id=
-                        row["id"],
-
-                        sensitivity=sensitivity
-                        
-
-                    )
-
-                    updated += 1
-
-                except Exception as e:
-
-                    print(
-                        "push sensitivity error =",
-                        e
-                    )
-        open(
-        "review_chunks.json",
-        "w",
-        encoding="utf-8"
-        
-    ).close()
-        
-        if title:
-
-            print(
-                f"START GRAPH BUILD: {title}"
-            )
-
-            try:
-
-                await (
-                    GraphIngestionService
-                    .ingest_document(
-
-                        db=db,
-
-                        title=title
-                    )
-                )
-
-                print(
-                    f"GRAPH BUILD SUCCESS: {title}"
-                )
-
-            except Exception as e:
-
-                print(
-                    f"GRAPH BUILD ERROR: {e}"
-                )
-            
-        
-        
-        SyncState.status = (
-        "COMPLETED"
-    )
-        
-
-        print(
-            "updated chunks =",
-            updated
-        )
+@router.post("/sync-completed")
+async def sync_completed():
+    """Acknowledge ingestion completion without local chunk post-processing."""
+    SyncState.status = "COMPLETED"
+    return {"status": "accepted"}
         
 @router.get("/sites")
 async def get_sites():

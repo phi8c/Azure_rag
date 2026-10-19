@@ -1,4 +1,12 @@
 venv/
+temp/
+mock_chunks.json
+review_chunks.json
+build/
+dist/
+*.build/
+*.dist/
+*.onefile-build/
 .env
 
 __pycache__/

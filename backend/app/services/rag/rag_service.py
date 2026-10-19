@@ -9,9 +9,6 @@ from app.services.llm.azure_openai_service import (
     get_shared_azure_openai_service,
 )
 
-from app.services.session_memory.session_memory_service import (
-    SessionMemoryService,
-)
 
 from app.services.rag.chat_config_cache import ChatConfigCache
 
@@ -31,25 +28,12 @@ class RagService:
     async def ask(
         self,
         db,
-        conversation_id: UUID,
         question: str,
         chunks: list,
         model_id: UUID,
         mode: PromptCode,
         workspace_code: str,
     ):
-
-        #
-        # Teams bot vẫn dùng history hội thoại
-        #
-
-        history = await (
-            SessionMemoryService
-            .build_context(
-                db=db,
-                conversation_id=conversation_id,
-            )
-        )
 
         chat_config = await self.load_chat_config(
             db=db,
@@ -64,7 +48,6 @@ class RagService:
                 chat_config=chat_config,
                 question=question,
                 chunks=chunks,
-                history=history,
             ),
             temperature=chat_config["temperature"],
             max_completion_tokens=chat_config["max_tokens"],

@@ -1,3 +1,3 @@
-# Reproducible dependency set captured from the existing backend venv.
+# Pinned direct runtime dependencies; pip resolves transitive dependencies.
 # Install this file on a clean server with: pip install -r requirements.txt
 -r requirements.lock.txt
