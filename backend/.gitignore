@@ -11,6 +11,10 @@ __pycache__/
 
 logs/
 
+scripts/*.pyc
+
+tests/__pycache__/
+
 *.log
 
 

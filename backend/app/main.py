@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from app.api.v1.website_crawl_router import router as website_crawl_router
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -299,6 +300,7 @@ app.include_router(permission_router)
 app.include_router(bot_router)
 app.include_router(conversation)
 app.include_router(document_router)
+app.include_router(website_crawl_router)
 app.include_router(graph_router)
 app.include_router(graph_chat_router)
 app.include_router(recruitment_candidate_router)
