@@ -197,23 +197,18 @@ class AzureSearchService:
     async def search_top_k(
         question: str,
         top_k: int,
-        user_object_id: str,
-        group_ids: list[str],
         workspace: str | None = None,
         top: int | None = None,
+        *,
+        acl_filter: str | None = None,
     ) -> list[dict]:
 
-        azure_filter = AzureSearchService.build_acl_filter(
-            user_object_id=user_object_id,
-            group_ids=group_ids,
-        )
+        azure_filter = acl_filter
 
         if workspace:
 
-            azure_filter = (
-                f"(workspace eq '{AzureSearchService._escape_odata_value(workspace)}') "
-                f"and ({azure_filter})"
-            )
+            workspace_filter = f"workspace eq '{AzureSearchService._escape_odata_value(workspace)}'"
+            azure_filter = f"({workspace_filter}) and ({azure_filter})" if azure_filter else workspace_filter
 
         embedding_response = await (
             AzureSearchService
@@ -249,7 +244,7 @@ class AzureSearchService:
         ]
 
     @staticmethod
-    async def retrieve(
+    async def retrieve_with_acl(
         question: str,
         top_k: int,
         user_object_id: str,
@@ -263,8 +258,7 @@ class AzureSearchService:
         best_chunks = await AzureSearchService.search_top_k(
             question=question,
             top_k=top_k,
-            user_object_id=user_object_id,
-            group_ids=group_ids,
+            acl_filter=AzureSearchService.build_acl_filter(user_object_id, group_ids),
             top=1,
         )
 
@@ -398,14 +392,14 @@ class AzureSearchService:
     async def retrieve_helpdesk(
         question: str,
         top_k: int,
-        user_object_id: str,
-        group_ids: list[str],
     ):
 
         return await AzureSearchService.search_top_k(
             question=question,
             top_k=top_k,
-            user_object_id=user_object_id,
-            group_ids=group_ids,
             workspace="HELPDESK",
         )
+
+    @staticmethod
+    async def retrieve(question: str, top_k: int):
+        return await AzureSearchService.search_top_k(question=question, top_k=top_k)

@@ -128,8 +128,6 @@ class ChatRouterTest(unittest.TestCase):
         retrieve.assert_awaited_once_with(
             question="Quy trình nghỉ phép?",
             top_k=7,
-            user_object_id="user-1",
-            group_ids=["g1"],
         )
         metadata, done = events[0][1], events[-1][1]
         self.assertEqual(metadata["conversation_id"], body()["conversation_id"])
@@ -210,15 +208,15 @@ class ChatRouterTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
-    def test_empty_object_id_returns_400_before_stream(self):
-        with patch.object(AzureSearchService, "retrieve", AsyncMock()) as retrieve:
+    def test_empty_object_id_is_ignored(self):
+        with patch.object(AzureSearchService, "retrieve", AsyncMock(return_value=[])) as retrieve:
             response = self.client.post(
                 "/chat/query",
                 json=body(microsoft_object_id="  "),
             )
 
-        self.assertEqual(response.status_code, 400)
-        retrieve.assert_not_called()
+        self.assertEqual(response.status_code, 200)
+        retrieve.assert_awaited_once_with(question=body()["question"], top_k=7)
 
     def test_retrieval_failure_emits_error_event(self):
         with patch.object(
@@ -281,8 +279,6 @@ class SearchTopKTest(unittest.IsolatedAsyncioTestCase):
             chunks = await AzureSearchService.retrieve_helpdesk(
                 question="VPN lỗi",
                 top_k=5,
-                user_object_id="u1",
-                group_ids=["g1"],
             )
 
         self.assertEqual([c["chunk_id"] for c in chunks], ["c1", "c2"])
@@ -295,8 +291,7 @@ class SearchTopKTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("text_vector", search_kwargs["select"])
         self.assertIn("chunk", search_kwargs["select"])
         self.assertEqual(search_kwargs["vector_queries"][0].k_nearest_neighbors, 5)
-        self.assertTrue(search_kwargs["filter"].startswith("(workspace eq 'HELPDESK') and ("))
-        self.assertIn("allowed_user_ids/any(u: u eq 'u1')", search_kwargs["filter"])
+        self.assertEqual(search_kwargs["filter"], "workspace eq 'HELPDESK'")
 
 
 class RetrieveFullDocumentTest(unittest.IsolatedAsyncioTestCase):
@@ -327,7 +322,7 @@ class RetrieveFullDocumentTest(unittest.IsolatedAsyncioTestCase):
         ), patch.object(
             AzureSearchService, "_get_async_search_client", return_value=search_client
         ):
-            return await AzureSearchService.retrieve(
+            return await AzureSearchService.retrieve_with_acl(
                 question="Hợp đồng BĐS",
                 top_k=10,
                 user_object_id="u1",

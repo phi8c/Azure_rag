@@ -42,7 +42,7 @@ class StatelessBotTest(unittest.IsolatedAsyncioTestCase):
             patch.object(bot_router, "RagService", return_value=rag),
             patch.object(bot_router, "get_token", new=AsyncMock(return_value="token")),
             patch.object(bot_router.httpx, "AsyncClient") as factory,
-            patch.object(bot_router.AzureSearchService, "retrieve", new=AsyncMock(return_value=[])) as retrieve,
+            patch.object(bot_router.AzureSearchService, "retrieve_with_acl", new=AsyncMock(return_value=[])) as retrieve,
             patch.object(bot_router.ChatConfigCache, "get_top_k", new=AsyncMock(return_value=7)),
         ):
             factory.return_value.__aenter__.return_value = client

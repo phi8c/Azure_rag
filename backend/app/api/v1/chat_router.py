@@ -277,12 +277,6 @@ async def stream_chat(
             workspace_code=workspace_code,
         )
 
-        if not is_public:
-
-            AzureSearchService.build_acl_filter(
-                user_object_id=body.microsoft_object_id,
-                group_ids=body.group_ids,
-            )
 
     except ValueError as exc:
 
@@ -326,8 +320,6 @@ async def stream_chat(
                 chunks = await retrieve(
                     question=body.question,
                     top_k=top_k,
-                    user_object_id=body.microsoft_object_id,
-                    group_ids=body.group_ids,
                 )
 
             except Exception as exc:

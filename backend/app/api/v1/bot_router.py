@@ -61,7 +61,7 @@ async def teams_message(body: dict, db: AsyncSession = Depends(get_db)):
             group_ids.extend(group["id"] for group in data.get("value", []))
             url = data.get("@odata.nextLink")
 
-        chunks = await AzureSearchService.retrieve(
+        chunks = await AzureSearchService.retrieve_with_acl(
             question=question,
             top_k=await ChatConfigCache.get_top_k(PromptCode.CHAT_RAG.value) or 10,
             user_object_id=object_id, group_ids=group_ids,
