@@ -2,7 +2,7 @@ import json
 from zipfile import Path
 from pathlib import Path
 
-from app.utils.extract.document_extraction import (
+from app.utils.extract.document_intelligent import (
     DocumentExtraction,
     DocumentExtractor,
 )
@@ -112,7 +112,7 @@ class ContractService:
 f"""
 Nội dung hợp đồng:
 
-{extraction}
+{extraction.text}
 """
 
             }
@@ -217,7 +217,7 @@ Nội dung hợp đồng:
     ) -> ContractRaw:
 
         file_hash = hashlib.sha256(
-            extraction.markdown.encode("utf-8")
+            extraction.text.encode("utf-8")
         ).hexdigest()
 
         item = await (
@@ -238,7 +238,7 @@ Nội dung hợp đồng:
 
                 file_hash=file_hash,
 
-                extracted_content=extraction.markdown,
+                extracted_content=extraction.text,
 
                 created_at=datetime.now(
                     timezone.utc,
@@ -269,7 +269,7 @@ Nội dung hợp đồng:
             item.file_hash = file_hash
 
             item.extracted_content = (
-                extraction.markdown
+                extraction.text
             )
 
             item.updated_at = datetime.now(

@@ -115,7 +115,7 @@ class DocumentExtractor:
                 }
             )
 
-        text = "\n\n".join(
+        text = document.content or "\n\n".join(
             paragraph["content"]
             for paragraph in paragraphs
             if paragraph["content"]

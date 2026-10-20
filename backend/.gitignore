@@ -1,4 +1,5 @@
 venv/
+.venv-build/
 temp/
 mock_chunks.json
 review_chunks.json

@@ -21,7 +21,6 @@ class UploadCandidateService:
 
     ALLOWED_EXTENSIONS = {
         ".pdf",
-        ".doc",
         ".docx",
     }
 
@@ -44,7 +43,7 @@ class UploadCandidateService:
 
         if extension not in UploadCandidateService.ALLOWED_EXTENSIONS:
             raise BadRequestException(
-                "Chỉ hỗ trợ file PDF, DOC hoặc DOCX."
+                "Chỉ hỗ trợ file PDF hoặc DOCX."
             )
 
         file_bytes = await file.read()

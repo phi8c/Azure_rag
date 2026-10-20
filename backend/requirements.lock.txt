@@ -1,19 +1,15 @@
 # Pinned direct dependencies used by backend/app and run_server.py.
 # Transitive dependencies are resolved by pip; this is not a complete resolver lock.
 # Audited against local imports and installed distribution metadata.
-# Docling is still used for contract/CV extraction and requires the Torch stack.
+# Document extraction and LLM calls use Azure Document Intelligence / Azure OpenAI.
 asyncpg==0.31.0
 azure-ai-documentintelligence==1.0.2
 azure-core==1.41.0
 azure-search-documents==12.0.0
 beautifulsoup4==4.15.0
 botbuilder-core==4.17.1
-docling==2.114.0
-docling-core==2.87.1
 duckdb==1.5.5
 fastapi==0.136.1
-google-generativeai==0.8.6
-groq==1.4.0
 httpx==0.28.1
 openai==2.41.0
 pgvector==0.4.2
@@ -22,7 +18,6 @@ pydantic-settings==2.14.0
 PyJWT==2.13.0
 python-dotenv==1.2.2
 python-multipart==0.0.32
-requests==2.34.2
 SQLAlchemy==2.0.49
 starlette==1.0.0
 supabase==2.31.0

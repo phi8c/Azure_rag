@@ -71,10 +71,6 @@ jobs:
             --collect-all fastapi `
             --collect-all azure `
             --collect-all duckdb `
-            --collect-all docling `
-            --collect-all docling_core `
-            --collect-all docling_parse `
-            --collect-all docling_ibm_models `
             run_server.py
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

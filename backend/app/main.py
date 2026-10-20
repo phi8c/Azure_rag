@@ -90,7 +90,6 @@ from app.services.azure.azure_search_service import AzureSearchService
 from app.services.rag.chat_config_cache import ChatConfigCache
 from app.services.llm.azure_openai_service import get_shared_azure_openai_service
 
-from app.startup.queue_consumer import start_queue_consumers
 from app.workers.executive_data_worker import ExecutiveDataWorker
 
 
@@ -195,7 +194,6 @@ async def start_chat_warm_up():
 #         sharepoint_delta_worker(),
 #     )
 
-#     await start_queue_consumers()
 
 
 
@@ -260,10 +258,9 @@ app.add_middleware(
 #     )
 
 #     #
-#     # Queue
+#     #
 #     #
 
-#     await start_queue_consumers()
 
 #     #
 #     # Project Tracking
