@@ -71,6 +71,7 @@ jobs:
             --collect-all fastapi `
             --collect-all azure `
             --collect-all duckdb `
+            --collect-all aiohttp `
             run_server.py
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
