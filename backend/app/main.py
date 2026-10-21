@@ -167,8 +167,8 @@ async def warm_up_chat():
 
         await AzureSearchService.warm_up()
 
-        # Mở sẵn kết nối của client chat (không tốn token)
-        await get_shared_azure_openai_service()._client.models.list()
+        # Tạo client theo cấu hình; không gọi API tốn token khi startup.
+        get_shared_azure_openai_service()
 
         print("chat warm up done")
 

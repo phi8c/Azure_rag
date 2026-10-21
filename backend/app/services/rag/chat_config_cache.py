@@ -129,6 +129,7 @@ class ChatConfigCache:
                 await db.execute(
                     select(
                         AIModel.id,
+                        AIModel.provider,
                         AIModel.model_name,
                     )
                 )
@@ -167,8 +168,8 @@ class ChatConfigCache:
                 for code, system_prompt in prompts
             },
             "models": {
-                str(model_id): model_name
-                for model_id, model_name in models
+                str(model_id): {"provider": provider, "model": model_name}
+                for model_id, provider, model_name in models
             },
             "model_configs": {
                 code: {

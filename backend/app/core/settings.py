@@ -46,10 +46,14 @@ class Settings(BaseSettings):
     
     LOGIC_APP_URL: str 
     
-    AZURE_OPENAI_ENDPOINT: str
-    AZURE_OPENAI_API_KEY: str
-    AZURE_OPENAI_API_VERSION: str
-    AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str
+    AZURE_OPENAI_ENDPOINT: str = ""
+    AZURE_OPENAI_API_KEY: str = ""
+    AZURE_OPENAI_API_VERSION: str = ""
+    AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str = ""
+    CLAUDE_API_KEY: str = ""
+    CLAUDE_WORKSPACE_ID: str = ""
+    CLAUDE_SONNET_MODEL: str = "claude-sonnet-4-5"
+    CLAUDE_HAIKU_MODEL: str = "claude-haiku-4-5"
     MICROSOFT_REDIRECT_URI: str
     
     MAX_FILE_REVIEW: int = 5
@@ -88,6 +92,8 @@ class Settings(BaseSettings):
     GOOGLE_REDIRECT_URI: str
     
     MEETING_SYNC_USER_ID: str
+    
+   
 
     model_config = SettingsConfigDict(
 

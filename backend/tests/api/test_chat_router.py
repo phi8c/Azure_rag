@@ -375,7 +375,12 @@ class ChatConfigCacheTest(unittest.IsolatedAsyncioTestCase):
 
     DATA = {
         "prompts": {"INTERNAL": "Context: {{context}}"},
-        "models": {"22222222-2222-2222-2222-222222222222": "gpt-5.1"},
+        "models": {
+            "22222222-2222-2222-2222-222222222222": {
+                "provider": "azure_openai",
+                "model": "gpt-5.1",
+            },
+        },
         "model_configs": {"CHAT_RAG": {"temperature": 1.0, "max_tokens": 2000}},
         "top_k": {"CHAT_RAG": 10},
     }
@@ -405,8 +410,33 @@ class ChatConfigCacheTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(load.await_count, 1)
         self.assertEqual(config["model"], "gpt-5.1")
+        self.assertEqual(config["provider"], "azure_openai")
         self.assertEqual(config["max_tokens"], 2000)
         self.assertEqual(await self.cache.get_top_k("CHAT_RAG"), 10)
+
+    async def test_load_chat_config_preserves_claude_provider(self):
+        from app.enums.prompt_code import PromptCode
+
+        claude_data = {
+            **self.DATA,
+            "models": {
+                "22222222-2222-2222-2222-222222222222": {
+                    "provider": "anthropic",
+                    "model": "claude-sonnet-4-5",
+                },
+            },
+        }
+
+        with patch.object(self.cache, "_load", AsyncMock(return_value=claude_data)):
+            config = await RagService().load_chat_config(
+                db=None,
+                model_id="22222222-2222-2222-2222-222222222222",
+                mode=PromptCode.INTERNAL,
+                workspace_code="CHAT_RAG",
+            )
+
+        self.assertEqual(config["provider"], "anthropic")
+        self.assertEqual(config["model"], "claude-sonnet-4-5")
 
     async def test_unknown_model_refreshes_at_most_once_then_404(self):
         from app.enums.prompt_code import PromptCode

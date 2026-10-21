@@ -51,6 +51,7 @@ class RagService:
             ),
             temperature=chat_config["temperature"],
             max_completion_tokens=chat_config["max_tokens"],
+            provider=chat_config["provider"],
         )
 
         return answer
@@ -71,6 +72,7 @@ class RagService:
             ),
             temperature=chat_config["temperature"],
             max_completion_tokens=chat_config["max_tokens"],
+            provider=chat_config["provider"],
         ):
 
             yield token
@@ -112,6 +114,10 @@ class RagService:
                 "AI Model not found."
             )
 
+        # Old cache entries may contain only the model name until the cache reloads.
+        if isinstance(model_name, str):
+            model_name = {"provider": "azure_openai", "model": model_name}
+
         model_config = await ChatConfigCache.lookup(
             "model_configs",
             workspace_code,
@@ -124,7 +130,8 @@ class RagService:
             )
 
         return {
-            "model": model_name,
+            "model": model_name["model"],
+            "provider": model_name["provider"],
             "system_prompt": system_prompt,
             "temperature": model_config["temperature"],
             "max_tokens": model_config["max_tokens"],
