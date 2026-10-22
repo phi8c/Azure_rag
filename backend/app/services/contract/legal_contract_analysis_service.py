@@ -13,8 +13,8 @@ from app.repositories.ai_prompt_repository import AIPromptRepository
 from app.repositories.rag_config_repository import (
     WorkspaceConfigRepository,
 )
-from app.services.contract.legal_chat_retrieval_service import (
-    LegalChatRetrievalService,
+from app.services.contract.legal_search_service import (
+    LegalSearchService,
 )
 from app.services.llm.azure_openai_service import AzureOpenAIService
 
@@ -22,6 +22,7 @@ from app.services.llm.azure_openai_service import AzureOpenAIService
 class LegalContractAnalysisService:
     MAX_LEGAL_CHECKS = 8
     MAX_SEEDS_PER_METADATA_FIELD = 2
+    MAX_CONCURRENT_CHECKS = 4
     ALLOWED_METADATA_FIELDS = {
             "doc_type",
             "doc_number",
@@ -95,92 +96,112 @@ class LegalContractAnalysisService:
         total = len(legal_checks)
         yield {"event": "started", "data": {"total": total}}
 
-        for index, check in enumerate(legal_checks):
-            check_started_at = perf_counter()
-            reviewer_timed = False
+        semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_CHECKS)
 
-            try:
-                retrieval_started_at = perf_counter()
+        async def run_check(index: int, check: dict[str, Any]) -> dict[str, Any]:
+            async with semaphore:
                 try:
-                    documents = await asyncio.to_thread(
-                        LegalChatRetrievalService.retrieve,
-                        check["metadata_seeds"],
-                    )
-                finally:
-                    contract_split_logger.info(
-                        "[LEGAL_CONTRACT][CHECK %d/%d] retrieval=%.3fs",
-                        index + 1,
-                        total,
-                        perf_counter() - retrieval_started_at,
-                    )
-
-                review_item = {
-                    "contract_text": check["contract_text"],
-                    "legal_context": documents,
-                }
-                reviewer_started_at = perf_counter()
-                try:
-                    reviewer_result = await self._call_reviewer(
-                        prompt=reviewer_prompt,
-                        review_data=review_item,
+                    result = await self._review_check(
+                        index=index,
+                        total=total,
+                        check=check,
+                        reviewer_prompt=reviewer_prompt,
                         model_name=model.model_name,
                         temperature=float(model_config.temperature),
                         max_tokens=int(model_config.max_tokens),
                     )
-                    result = self._validate_reviewer_result(
-                        reviewer_result,
-                        check["contract_text"],
-                    )
-                finally:
-                    contract_split_logger.info(
-                        "[LEGAL_CONTRACT][CHECK %d/%d] reviewer=%.3fs",
-                        index + 1,
-                        total,
-                        perf_counter() - reviewer_started_at,
-                    )
-                    reviewer_timed = True
-                yield {
-                    "event": "result",
-                    "data": {
-                        "index": index,
-                        "total": total,
-                        "result": result,
-                    },
-                }
-            except Exception as exc:
-                contract_split_logger.exception(
-                    "[LEGAL_CONTRACT][CHECK %d/%d] failed",
-                    index + 1,
-                    total,
-                )
-                yield {
-                    "event": "error",
-                    "data": {
-                        "index": index,
-                        "total": total,
-                        "check": check,
-                        "error": str(exc),
-                    },
-                }
-            finally:
-                if not reviewer_timed:
-                    contract_split_logger.info(
-                        "[LEGAL_CONTRACT][CHECK %d/%d] reviewer=0.000s",
+                    return {
+                        "event": "result",
+                        "data": {
+                            "index": index,
+                            "total": total,
+                            "result": result,
+                        },
+                    }
+                except Exception as exc:
+                    contract_split_logger.exception(
+                        "[LEGAL_CONTRACT][CHECK %d/%d] failed",
                         index + 1,
                         total,
                     )
-                contract_split_logger.info(
-                    "[LEGAL_CONTRACT][CHECK %d/%d] total=%.3fs",
-                    index + 1,
-                    total,
-                    perf_counter() - check_started_at,
-                )
+                    return {
+                        "event": "error",
+                        "data": {
+                            "index": index,
+                            "total": total,
+                            "check": check,
+                            "error": str(exc),
+                        },
+                    }
+
+        tasks = [
+            asyncio.create_task(run_check(index, check))
+            for index, check in enumerate(legal_checks)
+        ]
+
+        try:
+            # Kết quả trả về theo thứ tự hoàn thành; mỗi event có "index" để webapp ghép đúng điểm
+            for finished in asyncio.as_completed(tasks):
+                yield await finished
+        finally:
+            for task in tasks:
+                task.cancel()
 
         contract_split_logger.info(
             "[LEGAL_CONTRACT][TIMING] total=%.3fs",
             perf_counter() - total_started_at,
         )
         yield {"event": "completed", "data": {"total": total}}
+
+    async def _review_check(
+        self,
+        index: int,
+        total: int,
+        check: dict[str, Any],
+        reviewer_prompt,
+        model_name: str,
+        temperature: float,
+        max_tokens: int,
+    ) -> dict[str, Any]:
+        check_started_at = perf_counter()
+
+        retrieval_started_at = perf_counter()
+        documents = await LegalSearchService.retrieve(
+            check["metadata_seeds"],
+            check["contract_text"],
+        )
+        contract_split_logger.info(
+            "[LEGAL_CONTRACT][CHECK %d/%d] retrieval=%.3fs docs=%d",
+            index + 1,
+            total,
+            perf_counter() - retrieval_started_at,
+            len(documents),
+        )
+
+        reviewer_started_at = perf_counter()
+        reviewer_result = await self._call_reviewer(
+            prompt=reviewer_prompt,
+            review_data={
+                "contract_text": check["contract_text"],
+                "legal_context": documents,
+            },
+            model_name=model_name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        result = self._validate_reviewer_result(
+            reviewer_result,
+            check["contract_text"],
+        )
+        contract_split_logger.info(
+            "[LEGAL_CONTRACT][CHECK %d/%d] reviewer=%.3fs total=%.3fs",
+            index + 1,
+            total,
+            perf_counter() - reviewer_started_at,
+            perf_counter() - check_started_at,
+        )
+
+        return result
 
     async def _call_analyzer(
         self,

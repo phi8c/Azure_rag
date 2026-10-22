@@ -1,4 +1,3 @@
-import asyncio
 import json
 from collections import Counter
 from time import perf_counter
@@ -24,9 +23,6 @@ from app.repositories.rag_config_repository import (
 from app.services.contract.company_policy_retrieval_service import (
     CompanyPolicyRetrievalService,
 )
-from app.services.contract.legal_retrieval_service import (
-    LegalRetrievalService,
-)
 from app.services.llm.azure_openai_service import (
     AzureOpenAIService,
     LLMResponseTruncatedError,
@@ -39,136 +35,6 @@ class ContractAdvancedService:
 
     def __init__(self):
         self.llm = AzureOpenAIService()
-
-    async def analyze(
-        self,
-        db: AsyncSession,
-        file_path: str,
-        model_id: UUID,
-    ) -> dict[str, Any]:
-
-        request_started_at = perf_counter()
-        logger.info(
-            "=" * 100
-        )
-        logger.info(
-            "[CONTRACT_ADVANCED] request started model_id=%s",
-            model_id,
-        )
-
-        started_at = perf_counter()
-        model = await AIModelRepository.get_by_id(
-            db=db,
-            id=model_id,
-        )
-        logger.info(
-            "[CONTRACT_ADVANCED] load_model completed in %.3fs",
-            perf_counter() - started_at,
-        )
-
-        if model is None:
-            raise LookupError("AI model not found.")
-
-        started_at = perf_counter()
-        model_config = await (
-            WorkspaceConfigRepository
-            .get_model_config_by_workspace_code(
-                db=db,
-                workspace_code=PromptCode.CONTRACT_ANALYZE.value,
-            )
-        )
-        logger.info(
-            "[CONTRACT_ADVANCED] load_model_config completed in %.3fs",
-            perf_counter() - started_at,
-        )
-
-        if model_config is None:
-            raise LookupError(
-                "Workspace model config for CONTRACT_ANALYZE not found."
-            )
-
-        started_at = perf_counter()
-        contract_content = self._extract_contract(
-            file_path
-        )
-        logger.info(
-            "[CONTRACT_ADVANCED][TIMING] extract_contract=%.3fs",
-            perf_counter() - started_at,
-        )
-
-        started_at = perf_counter()
-        analysis = await self._analyze_contract_for_retrieval(
-            db=db,
-            contract_content=contract_content,
-            model_name=model.model_name,
-            temperature=float(model_config.temperature),
-            max_tokens=int(model_config.max_tokens),
-        )
-        logger.info(
-            "[CONTRACT_ADVANCED][TIMING] analyzer=%.3fs",
-            perf_counter() - started_at,
-        )
-
-        company_rule_checks = analysis[
-            "company_rule_checks"
-        ]
-        legal_checks = analysis[
-            "legal_checks"
-        ]
-        logger.info(
-            "[CONTRACT_ADVANCED] company_checks=%d legal_checks=%d",
-            len(company_rule_checks),
-            len(legal_checks),
-        )
-
-        company_prompt = (
-            await self._load_prompt(
-                db=db,
-                prompt_code=(
-                    PromptCode.CONTRACT_COMPANY_RULE_REVIEWER
-                ),
-            )
-            if company_rule_checks
-            else None
-        )
-        legal_prompt = (
-            await self._load_prompt(
-                db=db,
-                prompt_code=PromptCode.CONTRACT_LEGAL_REVIEWER,
-            )
-            if legal_checks
-            else None
-        )
-
-        company_rule_review, legal_review = await asyncio.gather(
-            self._process_company_pipeline(
-                db=db,
-                company_rule_checks=company_rule_checks,
-                prompt=company_prompt,
-                model_name=model.model_name,
-                temperature=float(model_config.temperature),
-                max_tokens=int(model_config.max_tokens),
-            ),
-            self._process_legal_pipeline(
-                db=db,
-                legal_checks=legal_checks,
-                prompt=legal_prompt,
-                model_name=model.model_name,
-                temperature=float(model_config.temperature),
-                max_tokens=int(model_config.max_tokens),
-            ),
-        )
-
-        response = {
-            "company_rule_review": company_rule_review,
-            "legal_review": legal_review,
-        }
-        logger.info(
-            "[CONTRACT_ADVANCED][TIMING] total=%.3fs",
-            perf_counter() - request_started_at,
-        )
-
-        return response
 
     async def analyze_company_rule(
         self,
@@ -252,67 +118,6 @@ class ContractAdvancedService:
             "company_rule_review": company_rule_review,
             "contract_content": contract_content,
         }
-
-    async def analyze_legal(
-        self,
-        db: AsyncSession,
-        model_id: UUID,
-        legal_checks: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        request_started_at = perf_counter()
-        contract_split_logger.info(
-            "[CONTRACT_LEGAL] started model_id=%s input_checks=%d",
-            model_id,
-            len(legal_checks),
-        )
-        started_at = perf_counter()
-        model, model_config = await self._load_model_context(
-            db=db,
-            model_id=model_id,
-        )
-        contract_split_logger.info(
-            "[CONTRACT_LEGAL][TIMING] load_model_context=%.3fs",
-            perf_counter() - started_at,
-        )
-        started_at = perf_counter()
-        normalized_legal_checks = self._validate_legal_checks(
-            legal_checks
-        )
-        contract_split_logger.info(
-            "[CONTRACT_LEGAL][TIMING] validate_checks=%.3fs "
-            "normalized_checks=%d",
-            perf_counter() - started_at,
-            len(normalized_legal_checks),
-        )
-        started_at = perf_counter()
-        legal_prompt = (
-            await self._load_prompt(
-                db=db,
-                prompt_code=PromptCode.CONTRACT_LEGAL_REVIEWER,
-            )
-            if normalized_legal_checks
-            else None
-        )
-        contract_split_logger.info(
-            "[CONTRACT_LEGAL][TIMING] load_prompt=%.3fs",
-            perf_counter() - started_at,
-        )
-        legal_review = await self._process_legal_pipeline(
-            db=db,
-            legal_checks=normalized_legal_checks,
-            prompt=legal_prompt,
-            model_name=model.model_name,
-            temperature=float(model_config.temperature),
-            max_tokens=int(model_config.max_tokens),
-            timing_scope="CONTRACT_LEGAL",
-            timing_logger=contract_split_logger,
-        )
-        contract_split_logger.info(
-            "[CONTRACT_LEGAL][TIMING] total=%.3fs",
-            perf_counter() - request_started_at,
-        )
-
-        return {"legal_review": legal_review}
 
     @staticmethod
     async def _load_model_context(
@@ -440,109 +245,6 @@ class ContractAdvancedService:
 
         return result
 
-    async def _process_legal_pipeline(
-        self,
-        db: AsyncSession,
-        legal_checks: list[dict[str, Any]],
-        prompt: Any,
-        model_name: str,
-        temperature: float,
-        max_tokens: int,
-        timing_scope: str = "CONTRACT_ADVANCED",
-        timing_logger: Any = None,
-    ) -> dict[str, Any]:
-
-        pipeline_started_at = perf_counter()
-        pipeline_logger = timing_logger or logger
-
-        if not legal_checks:
-            pipeline_logger.info(
-                "[%s][TIMING] legal_retrieval=0.000s",
-                timing_scope,
-            )
-            pipeline_logger.info(
-                "[%s][TIMING] legal_reviewer=0.000s",
-                timing_scope,
-            )
-            pipeline_logger.info(
-                "[%s][TIMING] legal_pipeline_total=0.000s",
-                timing_scope,
-            )
-            return {"results": []}
-
-        started_at = perf_counter()
-        review_data = await LegalRetrievalService.retrieve_async(
-            legal_checks
-        )
-        pipeline_logger.info(
-            "[%s][TIMING] legal_retrieval=%.3fs",
-            timing_scope,
-            perf_counter() - started_at,
-        )
-
-        review_json = json.dumps(
-            review_data,
-            ensure_ascii=False,
-            indent=2,
-        )
-        pipeline_logger.info(
-            "[%s] legal_context_documents=%d "
-            "legal_review_items=%d legal_review_chars=%d",
-            timing_scope,
-            sum(
-                len(item["contexts"])
-                for item in review_data
-            ),
-            len(review_data),
-            len(review_json),
-        )
-
-        started_at = perf_counter()
-        result = await self._review_legal(
-            db=db,
-            review_data=review_data,
-            review_json=review_json,
-            prompt=prompt,
-            model_name=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        pipeline_logger.info(
-            "[%s][TIMING] legal_reviewer=%.3fs",
-            timing_scope,
-            perf_counter() - started_at,
-        )
-        pipeline_logger.info(
-            "[%s][TIMING] legal_pipeline_total=%.3fs",
-            timing_scope,
-            perf_counter() - pipeline_started_at,
-        )
-
-        return result
-
-    async def _analyze_contract_for_retrieval(
-        self,
-        db: AsyncSession,
-        contract_content: str,
-        model_name: str,
-        temperature: float,
-        max_tokens: int,
-    ) -> dict[str, Any]:
-
-        result = await self._call_llm_json(
-            db=db,
-            prompt_code=PromptCode.CONTRACT_REVIEW_ANALYZER,
-            placeholder="{{contract_content}}",
-            placeholder_value=contract_content,
-            model_name=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-
-        return self._validate_analyzer_result(
-            result
-        )
-
     async def _analyze_contract_for_company_rules(
         self,
         db: AsyncSession,
@@ -604,48 +306,6 @@ class ContractAdvancedService:
         return self._validate_review_result(
             result=result,
             review_name="Company rule review",
-            review_data=review_data,
-        )
-
-    async def _review_legal(
-        self,
-        db: AsyncSession,
-        review_data: list[dict[str, Any]],
-        model_name: str,
-        temperature: float,
-        max_tokens: int,
-        review_json: str | None = None,
-        prompt: Any = None,
-    ) -> dict[str, Any]:
-
-        if not review_data:
-            logger.info(
-                "[CONTRACT_ADVANCED] legal_reviewer skipped: "
-                "no legal checks"
-            )
-            return {"results": []}
-
-        result = await self._call_llm_json(
-            db=db,
-            prompt_code=PromptCode.CONTRACT_LEGAL_REVIEWER,
-            placeholder="{{legal_review_data}}",
-            placeholder_value=(
-                review_json
-                or json.dumps(
-                    review_data,
-                    ensure_ascii=False,
-                    indent=2,
-                )
-            ),
-            model_name=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            prompt=prompt,
-        )
-
-        return self._validate_review_result(
-            result=result,
-            review_name="Legal review",
             review_data=review_data,
         )
 
@@ -773,40 +433,6 @@ class ContractAdvancedService:
         return result
 
     @classmethod
-    def _validate_analyzer_result(
-        cls,
-        result: dict[str, Any],
-    ) -> dict[str, Any]:
-
-        company_checks = result.get(
-            "company_rule_checks"
-        )
-        legal_checks = result.get(
-            "legal_checks"
-        )
-
-        if not isinstance(company_checks, list):
-            raise ValueError(
-                "company_rule_checks must be a list."
-            )
-
-        if not isinstance(legal_checks, list):
-            raise ValueError(
-                "legal_checks must be a list."
-            )
-
-        return {
-            "company_rule_checks": [
-                cls._validate_company_check(item)
-                for item in company_checks[:8]
-            ],
-            "legal_checks": [
-                cls._validate_legal_check(item)
-                for item in legal_checks[:8]
-            ],
-        }
-
-    @classmethod
     def _validate_company_analyzer_result(
         cls,
         result: dict[str, Any],
@@ -824,19 +450,6 @@ class ContractAdvancedService:
                 for item in company_checks[:8]
             ]
         }
-
-    @classmethod
-    def _validate_legal_checks(
-        cls,
-        legal_checks: Any,
-    ) -> list[dict[str, Any]]:
-        if not isinstance(legal_checks, list):
-            raise ValueError("legal_checks must be a list.")
-
-        return [
-            cls._validate_legal_check(item)
-            for item in legal_checks[:8]
-        ]
 
     @classmethod
     def _validate_company_check(
@@ -874,62 +487,6 @@ class ContractAdvancedService:
         return {
             "contract_text": contract_text,
             "retrieval_seeds": [normalized_seeds[0]],
-        }
-
-    @classmethod
-    def _validate_legal_check(
-        cls,
-        item: Any,
-    ) -> dict[str, Any]:
-
-        if not isinstance(item, dict):
-            raise ValueError(
-                "Each legal check must be an object."
-            )
-
-        contract_text = item.get("contract_text")
-        metadata_seeds = item.get("metadata_seeds")
-
-        if (
-            not isinstance(contract_text, str)
-            or not contract_text.strip()
-        ):
-            raise ValueError(
-                "Legal check contract_text must be a non-empty string."
-            )
-
-        if not isinstance(metadata_seeds, dict):
-            raise ValueError(
-                "Legal check metadata_seeds must be an object."
-            )
-
-        normalized_seeds = {}
-
-        for metadata_type, seeds in metadata_seeds.items():
-            if not isinstance(metadata_type, str):
-                raise ValueError(
-                    "Legal metadata seed keys must be strings."
-                )
-
-            if (
-                metadata_type
-                not in LegalRetrievalService.SUPPORTED_METADATA_FIELDS
-            ):
-                continue
-
-            normalized_values = cls._normalize_string_list(
-                seeds,
-                f"Legal metadata seeds for {metadata_type}",
-            )[:1]
-
-            if normalized_values:
-                normalized_seeds[metadata_type] = (
-                    normalized_values
-                )
-
-        return {
-            "contract_text": contract_text,
-            "metadata_seeds": normalized_seeds,
         }
 
     @staticmethod

@@ -1,4 +1,3 @@
-import asyncio
 import json
 from time import perf_counter
 from typing import Any
@@ -13,8 +12,8 @@ from app.repositories.ai_prompt_repository import AIPromptRepository
 from app.repositories.rag_config_repository import (
     WorkspaceConfigRepository,
 )
-from app.services.contract.legal_chat_retrieval_service import (
-    LegalChatRetrievalService,
+from app.services.contract.legal_search_service import (
+    LegalSearchService,
 )
 from app.services.llm.azure_openai_service import AzureOpenAIService
 
@@ -86,9 +85,9 @@ class LegalChatService:
         )
 
         started_at = perf_counter()
-        legal_context = await asyncio.to_thread(
-            LegalChatRetrievalService.retrieve,
+        legal_context = await LegalSearchService.retrieve(
             metadata_seeds,
+            question,
         )
         contract_split_logger.info(
             "[LEGAL_CHAT][TIMING] legal_retrieval=%.3fs",

@@ -249,6 +249,44 @@ class ChatRouterTest(unittest.TestCase):
         )
 
 
+class RelevanceFilterTest(unittest.IsolatedAsyncioTestCase):
+
+    def test_smalltalk_is_detected_and_questions_are_not(self):
+        from app.api.v1.chat_router import is_smalltalk
+
+        for text in ["Bạn khỏe không?", "Cảm ơn bạn nhiều nhé", "Chào bạn", "ok"]:
+            self.assertTrue(is_smalltalk(text), text)
+
+        for text in ["Thủ đô của Pháp là gì?", "Quy trình xin nghỉ phép năm như thế nào?", "ok cho hỏi về nghỉ phép"]:
+            self.assertFalse(is_smalltalk(text), text)
+
+    async def test_retrieve_keeps_only_chunks_above_threshold(self):
+        chunks = [
+            {"chunk_id": "good", "similarity": 0.62},
+            {"chunk_id": "weak", "similarity": 0.40},
+        ]
+
+        with patch.object(AzureSearchService, "search_top_k", AsyncMock(return_value=chunks)):
+            result = await AzureSearchService.retrieve(question="q", top_k=5)
+
+        self.assertEqual([c["chunk_id"] for c in result], ["good"])
+
+    async def test_irrelevant_question_returns_no_sources(self):
+        chunks = [{"chunk_id": "x", "similarity": 0.39}]
+
+        with patch.object(AzureSearchService, "search_top_k", AsyncMock(return_value=chunks)):
+            result = await AzureSearchService.retrieve(question="Thủ đô của Pháp?", top_k=5)
+
+        self.assertEqual(result, [])
+
+    async def test_smalltalk_skips_retrieval(self):
+        with patch.object(AzureSearchService, "retrieve", AsyncMock(return_value=[])) as retrieve:
+            from app.api.v1 import chat_router
+            body = {"question": "Bạn khỏe không?"}
+            self.assertTrue(chat_router.is_smalltalk(body["question"]))
+        retrieve.assert_not_awaited()
+
+
 class SearchTopKTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_embeds_question_and_returns_top_k_chunks(self):
@@ -260,8 +298,8 @@ class SearchTopKTest(unittest.IsolatedAsyncioTestCase):
         )
 
         docs = [
-            {"@search.score": 2.0, "chunk_id": "c1", "chunk": "A", "source_file": "a.docx"},
-            {"@search.score": 1.0, "chunk_id": "c2", "chunk": "B", "source_file": "b.docx"},
+            {"@search.score": 2.0, "chunk_id": "c1", "chunk": "A", "source_file": "a.docx", "text_vector": [0.1, 0.2]},
+            {"@search.score": 1.0, "chunk_id": "c2", "chunk": "B", "source_file": "b.docx", "text_vector": [0.2, 0.1]},
         ]
 
         async def results():
@@ -288,7 +326,7 @@ class SearchTopKTest(unittest.IsolatedAsyncioTestCase):
         search_kwargs = search_client.search.await_args.kwargs
         self.assertEqual(search_kwargs["search_text"], "VPN lỗi")
         self.assertEqual(search_kwargs["top"], 5)
-        self.assertNotIn("text_vector", search_kwargs["select"])
+        self.assertIn("text_vector", search_kwargs["select"])  # cần để tính cosine ngưỡng
         self.assertIn("chunk", search_kwargs["select"])
         self.assertEqual(search_kwargs["vector_queries"][0].k_nearest_neighbors, 5)
         self.assertEqual(search_kwargs["filter"], "workspace eq 'HELPDESK'")
@@ -422,7 +460,7 @@ class ChatConfigCacheTest(unittest.IsolatedAsyncioTestCase):
             "models": {
                 "22222222-2222-2222-2222-222222222222": {
                     "provider": "anthropic",
-                    "model": "claude-sonnet-4-5",
+                    "model": "claude-sonnet-5-5",
                 },
             },
         }
@@ -436,7 +474,7 @@ class ChatConfigCacheTest(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(config["provider"], "anthropic")
-        self.assertEqual(config["model"], "claude-sonnet-4-5")
+        self.assertEqual(config["model"], "claude-sonnet-5-5")
 
     async def test_unknown_model_refreshes_at_most_once_then_404(self):
         from app.enums.prompt_code import PromptCode

@@ -4,11 +4,10 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile
 from starlette.responses import StreamingResponse
 
 from app.api.v1.contract_router import (
-    analyze_contract_advanced,
     analyze_contract_advanced_company_rule,
     analyze_contract_advanced_legal,
     legal_chat,
@@ -27,62 +26,6 @@ from app.services.contract.contract_advanced_service import (
 
 
 class ContractAdvancedRouterTest(unittest.IsolatedAsyncioTestCase):
-
-    async def test_temporary_file_is_removed(self):
-        observed_path = None
-
-        async def analyze(
-            service,
-            db,
-            file_path,
-            model_id,
-        ):
-            nonlocal observed_path
-            observed_path = Path(file_path)
-            self.assertTrue(observed_path.is_file())
-            self.assertEqual(
-                observed_path.read_bytes(),
-                b"contract",
-            )
-            return {
-                "company_rule_review": {"results": []},
-                "legal_review": {"results": []},
-            }
-
-        upload = UploadFile(
-            filename="contract.pdf",
-            file=io.BytesIO(b"contract"),
-        )
-
-        with patch.object(
-            ContractAdvancedService,
-            "analyze",
-            new=analyze,
-        ):
-            result = await analyze_contract_advanced(
-                file=upload,
-                model_id=uuid4(),
-                db=None,
-            )
-
-        self.assertEqual(result["legal_review"], {"results": []})
-        self.assertIsNotNone(observed_path)
-        self.assertFalse(observed_path.exists())
-
-    async def test_unsupported_file_type_is_rejected(self):
-        upload = UploadFile(
-            filename="contract.txt",
-            file=io.BytesIO(b"contract"),
-        )
-
-        with self.assertRaises(HTTPException) as error:
-            await analyze_contract_advanced(
-                file=upload,
-                model_id=uuid4(),
-                db=None,
-            )
-
-        self.assertEqual(error.exception.status_code, 400)
 
     async def test_company_rule_endpoint_removes_temporary_file(self):
         observed_path = None

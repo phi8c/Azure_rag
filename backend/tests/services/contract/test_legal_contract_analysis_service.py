@@ -5,8 +5,8 @@ from app.enums.prompt_code import PromptCode
 from app.services.contract.legal_contract_analysis_service import (
     LegalContractAnalysisService,
 )
-from app.services.contract.legal_chat_retrieval_service import (
-    LegalChatRetrievalService,
+from app.services.contract.legal_search_service import (
+    LegalSearchService,
 )
 
 
@@ -115,7 +115,7 @@ class LegalContractAnalysisServiceTest(
                 PromptCode.LEGAL_CONTRACT_REVIEWER: reviewer_prompt,
             }[prompt_code]
 
-        def retrieve(metadata_seeds):
+        async def retrieve(metadata_seeds, contract_text=""):
             document_id = (
                 "law-1" if "title" in metadata_seeds else "law-2"
             )
@@ -139,9 +139,9 @@ class LegalContractAnalysisServiceTest(
                 new=AsyncMock(side_effect=load_prompt),
             ) as load_prompt_mock,
             patch.object(
-                LegalChatRetrievalService,
+                LegalSearchService,
                 "retrieve",
-                side_effect=retrieve,
+                new=AsyncMock(side_effect=retrieve),
             ) as retrieval,
         ):
             events = [
@@ -216,7 +216,7 @@ class LegalContractAnalysisServiceTest(
                 new=AsyncMock(return_value=analyzer_prompt),
             ) as load_prompt,
             patch.object(
-                LegalChatRetrievalService,
+                LegalSearchService,
                 "retrieve",
             ) as retrieval,
         ):
@@ -242,6 +242,6 @@ class LegalContractAnalysisServiceTest(
 
     def test_legal_contract_top_k_is_four(self):
         self.assertEqual(
-            LegalChatRetrievalService.LEGAL_CHAT_TOP_K,
+            LegalSearchService.TOP_K,
             4,
         )

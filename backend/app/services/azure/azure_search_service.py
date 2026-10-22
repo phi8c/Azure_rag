@@ -194,6 +194,12 @@ class AzureSearchService:
         }
 
     @staticmethod
+    def _cosine(a: list[float], b: list[float]) -> float:
+        dot = sum(x * y for x, y in zip(a, b))
+        norm = (sum(x * x for x in a) ** 0.5) * (sum(y * y for y in b) ** 0.5)
+        return dot / norm if norm else 0.0
+
+    @staticmethod
     async def search_top_k(
         question: str,
         top_k: int,
@@ -201,6 +207,7 @@ class AzureSearchService:
         top: int | None = None,
         *,
         acl_filter: str | None = None,
+        with_similarity: bool = False,
     ) -> list[dict]:
 
         azure_filter = acl_filter
@@ -220,11 +227,18 @@ class AzureSearchService:
             )
         )
 
+        query_vector = embedding_response.data[0].embedding
+
         vector_query = VectorizedQuery(
-            vector=embedding_response.data[0].embedding,
+            vector=query_vector,
             k_nearest_neighbors=top_k,
             fields="text_vector",
         )
+
+        fields = list(AzureSearchService.CHUNK_FIELDS)
+
+        if with_similarity:
+            fields.append("text_vector")
 
         results = await (
             AzureSearchService
@@ -234,13 +248,33 @@ class AzureSearchService:
                 vector_queries=[vector_query],
                 filter=azure_filter,
                 top=top or top_k,
-                select=AzureSearchService.CHUNK_FIELDS,
+                select=fields,
             )
         )
 
+        chunks = []
+
+        async for doc in results:
+            chunk = AzureSearchService._to_chunk(doc)
+
+            if with_similarity:
+                chunk["similarity"] = AzureSearchService._cosine(
+                    query_vector,
+                    doc.get("text_vector") or [],
+                )
+
+            chunks.append(chunk)
+
+        return chunks
+
+    @staticmethod
+    def _keep_relevant(chunks: list[dict]) -> list[dict]:
+        threshold = settings.CHAT_MIN_SIMILARITY
+
         return [
-            AzureSearchService._to_chunk(doc)
-            async for doc in results
+            chunk
+            for chunk in chunks
+            if chunk.get("similarity", 0.0) >= threshold
         ]
 
     @staticmethod
@@ -394,12 +428,21 @@ class AzureSearchService:
         top_k: int,
     ):
 
-        return await AzureSearchService.search_top_k(
+        chunks = await AzureSearchService.search_top_k(
             question=question,
             top_k=top_k,
             workspace="HELPDESK",
+            with_similarity=True,
         )
+
+        return AzureSearchService._keep_relevant(chunks)
 
     @staticmethod
     async def retrieve(question: str, top_k: int):
-        return await AzureSearchService.search_top_k(question=question, top_k=top_k)
+        chunks = await AzureSearchService.search_top_k(
+            question=question,
+            top_k=top_k,
+            with_similarity=True,
+        )
+
+        return AzureSearchService._keep_relevant(chunks)

@@ -105,8 +105,8 @@ class LegalChatServiceTest(unittest.IsolatedAsyncioTestCase):
             ) as load_prompt_mock,
             patch(
                 "app.services.contract.legal_chat_service."
-                "LegalChatRetrievalService.retrieve",
-                return_value=[document],
+                "LegalSearchService.retrieve",
+                new=AsyncMock(return_value=[document]),
             ) as retrieve,
         ):
             result = await self.service.chat(
@@ -116,8 +116,9 @@ class LegalChatServiceTest(unittest.IsolatedAsyncioTestCase):
                 extracted_contract="Contract body",
             )
 
-        retrieve.assert_called_once_with(
-            {"title": ["contract penalty"]}
+        retrieve.assert_awaited_once_with(
+            {"title": ["contract penalty"]},
+            "Is this penalty valid?",
         )
         self.assertEqual(
             load_prompt_mock.await_args_list[0].kwargs["prompt_code"],
@@ -183,8 +184,8 @@ class LegalChatServiceTest(unittest.IsolatedAsyncioTestCase):
             ) as load_prompt,
             patch(
                 "app.services.contract.legal_chat_service."
-                "LegalChatRetrievalService.retrieve",
-                return_value=[],
+                "LegalSearchService.retrieve",
+                new=AsyncMock(return_value=[]),
             ),
         ):
             result = await self.service.chat(

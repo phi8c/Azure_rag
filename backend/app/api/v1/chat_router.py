@@ -1,4 +1,5 @@
 import json
+import re
 
 from uuid import uuid4
 
@@ -52,6 +53,29 @@ router = APIRouter(
 CHAT_RAG_DEFAULT_TOP_K = 10
 
 HELPDESK_DEFAULT_TOP_K = 20
+
+
+SMALLTALK_EXACT = {
+    "chào", "xin chào", "chao", "hi", "hello", "hey", "alo",
+    "ok", "oke", "okie", "cảm ơn", "cám ơn", "thanks", "thank you",
+    "tạm biệt", "bye", "bạn khỏe không", "bạn khoẻ không",
+    "bạn có khỏe không", "bạn là ai", "bạn tên gì",
+}
+
+SMALLTALK_START = ("chào", "xin chào", "cảm ơn", "cám ơn", "bạn khỏe", "bạn khoẻ")
+
+
+def is_smalltalk(question: str) -> bool:
+    """Câu xã giao ngắn (chào, hỏi thăm, cảm ơn): không cần tìm tài liệu."""
+    text = " ".join(re.sub(r"[^\w\s]", " ", question.lower()).split())
+
+    if not text:
+        return True
+
+    if text in SMALLTALK_EXACT:
+        return True
+
+    return len(text.split()) <= 6 and text.startswith(SMALLTALK_START)
 
 
 def sse_event(
@@ -302,7 +326,7 @@ async def stream_chat(
         raw_answer = ""
         full_answer = ""
         chunks = []
-        final_sources = None
+        final_sources = None if is_public else []
         public_parser = (
             PublicAnswerStreamParser()
             if is_public
@@ -313,7 +337,7 @@ async def stream_chat(
         # Retrieval chạy bên trong stream để header HTTP được trả ngay
         #
 
-        if not is_public:
+        if not is_public and not is_smalltalk(body.question):
 
             try:
 
@@ -341,6 +365,28 @@ async def stream_chat(
 
             final_sources = build_internal_sources(chunks)
 
+        effective_config = chat_config
+
+        #
+        # INTERNAL chỉ trả lời từ tài liệu; không có context thì dùng COMBINE
+        # để model vẫn trò chuyện bình thường (không nhắc "không có dữ liệu")
+        #
+
+        if not is_public and not chunks and body.mode == PromptCode.INTERNAL:
+
+            try:
+
+                effective_config = await rag_service.load_chat_config(
+                    db=db,
+                    model_id=body.model_id,
+                    mode=PromptCode.COMBINE,
+                    workspace_code=workspace_code,
+                )
+
+            except LookupError:
+
+                effective_config = chat_config
+
         yield sse_event(
             "metadata",
             {
@@ -353,7 +399,7 @@ async def stream_chat(
         try:
 
             async for token in rag_service.ask_stream(
-                chat_config=chat_config,
+                chat_config=effective_config,
                 question=body.question,
                 chunks=chunks,
             ):

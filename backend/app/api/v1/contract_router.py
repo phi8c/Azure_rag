@@ -103,51 +103,6 @@ async def analyze_contract(
     
     
 
-@router.post("/analyze-advanced")
-async def analyze_contract_advanced(
-    file: UploadFile = File(...),
-    model_id: UUID = Form(...),
-    db: AsyncSession = Depends(get_db),
-):
-
-    suffix = Path(
-        file.filename or ""
-    ).suffix.lower()
-
-    if suffix not in {".pdf", ".docx"}:
-        raise HTTPException(
-            status_code=400,
-            detail="Only PDF and DOCX files are supported.",
-        )
-
-    file_path = None
-
-    try:
-        with tempfile.NamedTemporaryFile(
-            delete=False,
-            suffix=suffix,
-        ) as tmp:
-            file_path = tmp.name
-            shutil.copyfileobj(
-                file.file,
-                tmp,
-            )
-
-        return await (
-            ContractAdvancedService()
-            .analyze(
-                db=db,
-                file_path=file_path,
-                model_id=model_id,
-            )
-        )
-    finally:
-        if file_path:
-            Path(file_path).unlink(
-                missing_ok=True
-            )
-
-
 @router.post("/analyze-advanced/company-rule")
 async def analyze_contract_advanced_company_rule(
     file: UploadFile = File(...),

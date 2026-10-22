@@ -1,4 +1,4 @@
-import httpx
+﻿import httpx
 
 from app.core.settings import (
     settings
@@ -270,6 +270,28 @@ class SharePointService:
                 }
                 for site in data.get("value", [])
             ]
+
+    @staticmethod
+    async def get_configured_site():
+        """Return the SharePoint site configured for this deployment."""
+        site_id = settings.SHAREPOINT_SITE_ID.strip()
+        if not site_id:
+            raise ValueError("SHAREPOINT_SITE_ID is not configured.")
+
+        headers = await SharePointService._get_headers()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"https://graph.microsoft.com/v1.0/sites/{site_id}",
+                headers=headers,
+            )
+            response.raise_for_status()
+            site = response.json()
+
+        return {
+            "id": site["id"],
+            "name": site.get("displayName", site.get("name", "")),
+            "web_url": site.get("webUrl", ""),
+        }
             
     @staticmethod
     async def get_lists(
@@ -422,63 +444,42 @@ class SharePointService:
     @staticmethod
     async def get_upload_options():
 
-        sites = await SharePointService.get_sites()
+        site = await SharePointService.get_configured_site()
+        configuration_list = await SharePointService.find_configuration_list(
+            site_id=site["id"],
+        )
+        if configuration_list is None:
+            return []
 
-        result = []
+        configuration = await SharePointService.get_rag_configuration(
+            site_id=site["id"],
+            list_id=configuration_list["id"],
+        )
+        items = configuration.get("value", [])
+        if not items or not items[0].get("fields", {}).get("EnableRAG", False):
+            return []
 
-        for site in sites:
-
-            configuration_list = await SharePointService.find_configuration_list(
-                site_id=site["id"],
+        drives = await SharePointService.get_drives(site_id=site["id"])
+        libraries = []
+        for drive in drives.get("value", []):
+            folders = await SharePointService.get_root_folders(
+                drive_id=drive["id"],
             )
-
-            if configuration_list is None:
-                continue
-
-            configuration = await SharePointService.get_rag_configuration(
-                site_id=site["id"],
-                list_id=configuration_list["id"],
-            )
-
-            items = configuration.get("value", [])
-
-            if not items:
-                continue
-
-            fields = items[0]["fields"]
-
-            if not fields.get("EnableRAG", False):
-                continue
-
-            drives = await SharePointService.get_drives(
-                site_id=site["id"],
-            )
-
-            libraries = []
-
-            for drive in drives.get("value", []):
-
-                folders = await SharePointService.get_root_folders(
-                    drive_id=drive["id"],
-                )
-
-                libraries.append(
-                    {
-                        "id": drive["id"],
-                        "name": drive["name"],
-                        "folders": folders,
-                    }
-                )
-
-            result.append(
+            libraries.append(
                 {
-                    "id": site["id"],
-                    "name": site["name"],
-                    "libraries": libraries,
+                    "id": drive["id"],
+                    "name": drive["name"],
+                    "folders": folders,
                 }
             )
 
-        return result
+        return [
+            {
+                "id": site["id"],
+                "name": site["name"],
+                "libraries": libraries,
+            }
+        ]
     
     @staticmethod
     async def upload_file_sharepoint(
@@ -536,7 +537,7 @@ class SharePointService:
         for item in lists["value"]:
 
             if item["displayName"].lower() in [
-                "tài liệu",
+                "taÌ€i liÃªÌ£u",
                 "documents",
                 "shared documents",
             ]:
@@ -722,76 +723,36 @@ class SharePointService:
     @staticmethod
     async def get_upload_folder_tree():
 
-        sites = await (
-            SharePointService
-            .get_sites()
+        site = await SharePointService.get_configured_site()
+        configuration = await SharePointService.find_configuration_list(
+            site_id=site["id"],
         )
+        if configuration is None:
+            return []
 
-        result = []
+        rag = await SharePointService.get_rag_configuration(
+            site_id=site["id"],
+            list_id=configuration["id"],
+        )
+        items = rag.get("value", [])
+        if not items or not items[0].get("fields", {}).get("EnableRAG", False):
+            return []
 
-        for site in sites:
-
-            configuration = await (
-                SharePointService
-                .find_configuration_list(
-                    site_id=site["id"],
-                )
-            )
-
-            if configuration is None:
-                continue
-
-            rag = await (
-                SharePointService
-                .get_rag_configuration(
-                    site_id=site["id"],
-                    list_id=configuration["id"],
-                )
-            )
-
-            items = rag.get("value", [])
-
-            if not items:
-                continue
-
-            if not items[0]["fields"].get(
-                "EnableRAG",
-                False,
-            ):
-                continue
-
-            drives = await (
-                SharePointService
-                .get_drives(
-                    site_id=site["id"],
-                )
-            )
-
-            libraries = []
-
-            for drive in drives.get("value", []):
-
-                libraries.append(
-                    {
-                        "id": drive["id"],
-                        "name": drive["name"],
-                        "folders": await (
-                            SharePointService
-                            .get_folders(
-                                drive["id"],
-                            )
-                        ),
-                    }
-                )
-
-            result.append(
+        drives = await SharePointService.get_drives(site_id=site["id"])
+        libraries = []
+        for drive in drives.get("value", []):
+            libraries.append(
                 {
-                    "id": site["id"],
-                    "name": site["name"],
-                    "libraries": libraries,
+                    "id": drive["id"],
+                    "name": drive["name"],
+                    "folders": await SharePointService.get_folders(drive["id"]),
                 }
             )
 
-        return result
-                            
-                
+        return [
+            {
+                "id": site["id"],
+                "name": site["name"],
+                "libraries": libraries,
+            }
+        ]

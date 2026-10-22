@@ -6,11 +6,13 @@ asyncpg==0.31.0
 azure-ai-documentintelligence==1.0.2
 azure-core==1.41.0
 azure-search-documents==12.0.0
+azure-storage-blob==12.31.0
 beautifulsoup4==4.15.0
 botbuilder-core==4.17.1
-duckdb==1.5.5
+cryptography==48.0.0
 fastapi==0.136.1
 httpx==0.28.1
+isodate==0.7.2
 openai==2.41.0
 pgvector==0.4.2
 pydantic==2.13.4
@@ -22,5 +24,5 @@ SQLAlchemy==2.0.49
 starlette==1.0.0
 supabase==2.31.0
 uvicorn==0.46.0
-aiohttp==3.13.3
+aiohttp==3.13.5
 anthropic==0.75.0

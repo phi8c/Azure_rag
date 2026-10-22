@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     AZURE_SEARCH_INDEX: str | None = None
 
     AZURE_SEARCH_KEY: str | None = None
+
+    # Ngưỡng cosine tối thiểu để chunk được coi là liên quan (dưới ngưỡng thì không đưa vào context/sources)
+    CHAT_MIN_SIMILARITY: float = 0.44
     
     
     
@@ -52,8 +55,8 @@ class Settings(BaseSettings):
     AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str = ""
     CLAUDE_API_KEY: str = ""
     CLAUDE_WORKSPACE_ID: str = ""
-    CLAUDE_SONNET_MODEL: str = "claude-sonnet-4-5"
-    CLAUDE_HAIKU_MODEL: str = "claude-haiku-4-5"
+    CLAUDE_SONNET_MODEL: str = "claude-sonnet-5-5"
+    CLAUDE_HAIKU_MODEL: str = "claude-haiku-5-5"
     MICROSOFT_REDIRECT_URI: str
     
     MAX_FILE_REVIEW: int = 5
@@ -82,7 +85,13 @@ class Settings(BaseSettings):
     AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT: str
     AZURE_DOCUMENT_INTELLIGENCE_KEY: str
 
-    LEGAL_DB_PATH: str = "./data/legal_vbpl.duckdb"
+
+    # Kho pháp luật trên Azure (Search metadata + Blob toàn văn)
+    AZURE_LEGAL_SEARCH_INDEX: str | None = None
+    AZURE_LEGAL_BLOB_CONTAINER: str | None = None
+    AZURE_STORAGE_ACCOUNT_URL: str | None = None
+    AZURE_STORAGE_SAS_TOKEN: str | None = None
+    AZURE_STORAGE_KEY: str | None = None
     
     
     GOOGLE_CUSTOMER_ID: str
