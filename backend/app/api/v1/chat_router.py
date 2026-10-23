@@ -321,7 +321,7 @@ async def stream_chat(
     # The landing-page widget supplies a stable UUID. Store one counter per
     # conversation; a returned zero means this is every third request.
     should_suggest_contact = False
-    if track_conversation:
+    if track_conversation and body.mode == PromptCode.INTERNAL:
         request_count = await ConversationRepository.increment_chat_request_count(
             db=db,
             conversation_id=conversation_uuid,
