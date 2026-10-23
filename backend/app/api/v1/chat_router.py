@@ -23,6 +23,8 @@ from app.schemas.chat_schema import (
     ChatRequest,
 )
 
+from app.repositories.conversation_repository import ConversationRepository
+
 from app.services.azure.azure_search_service import (
     AzureSearchService
 )
@@ -272,16 +274,16 @@ async def stream_chat(
     workspace_code: str,
     default_top_k: int,
     retrieve,
+    track_conversation: bool = False,
 ) -> StreamingResponse:
 
     #
-    # Chat không tạo/cập nhật conversation hay message trong DB.
-    # conversation_id do webapp quản lý, chỉ trả lại trong event.
+    # The client manages the conversation ID; the public query endpoint keeps
+    # only its request counter in the conversations table.
     #
 
-    conversation_id = str(
-        body.conversation_id or uuid4()
-    )
+    conversation_uuid = body.conversation_id or uuid4()
+    conversation_id = str(conversation_uuid)
 
     is_public = body.mode == PromptCode.PUBLIC
 
@@ -315,6 +317,25 @@ async def stream_chat(
             status_code=404,
             detail=str(exc),
         ) from exc
+
+    # The landing-page widget supplies a stable UUID. Store one counter per
+    # conversation; a returned zero means this is every third request.
+    should_suggest_contact = False
+    if track_conversation:
+        request_count = await ConversationRepository.increment_chat_request_count(
+            db=db,
+            conversation_id=conversation_uuid,
+        )
+        should_suggest_contact = request_count == 0
+
+    if should_suggest_contact:
+        chat_config = dict(chat_config)
+        chat_config["system_prompt"] += (
+            "\n\nHãy kết thúc câu trả lời này bằng lời mời tự nhiên: "
+            "‘Quý khách có thể để lại họ tên, email và số điện thoại trong cuộc trò chuyện "
+            "này để bên chúng tôi liên hệ hỗ trợ.’ Nếu câu trả lời cần theo định dạng JSON, "
+            "đặt lời mời trong trường answer và giữ nguyên định dạng JSON bắt buộc."
+        )
 
     top_k = (
         await ChatConfigCache.get_top_k(workspace_code)
@@ -490,6 +511,7 @@ async def query(
         workspace_code=PromptCode.CHAT_RAG.value,
         default_top_k=CHAT_RAG_DEFAULT_TOP_K,
         retrieve=AzureSearchService.retrieve,
+        track_conversation=True,
     )
 
 

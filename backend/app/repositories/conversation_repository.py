@@ -4,11 +4,8 @@ from sqlalchemy.ext.asyncio import (
 
 )
 
-from sqlalchemy import (
-
- select
-
-)
+from sqlalchemy import case, select
+from sqlalchemy.dialects.postgresql import insert
 from uuid import UUID
 from typing import Optional
 
@@ -22,6 +19,29 @@ from app.models.conversation import (
 
 
 class ConversationRepository:
+    @staticmethod
+    async def increment_chat_request_count(db: AsyncSession, conversation_id: UUID) -> int:
+        """Atomically increment the public chat counter, rolling over after three."""
+        insert_stmt = insert(Conversation).values(
+            id=conversation_id,
+            # Legacy DBs may still enforce NOT NULL on user_email.
+            user_email="",
+            title="Landing page chat",
+            request_count=1,
+        )
+        stmt = insert_stmt.on_conflict_do_update(
+            index_elements=[Conversation.id],
+            set_={
+                "request_count": case(
+                    (Conversation.request_count >= 2, 0),
+                    else_=Conversation.request_count + 1,
+                )
+            },
+        ).returning(Conversation.request_count)
+        count = (await db.execute(stmt)).scalar_one()
+        await db.commit()
+        return count
+
     @staticmethod
     async def create(
         db: AsyncSession,

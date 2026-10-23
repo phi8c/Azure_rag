@@ -40,6 +40,13 @@ class Conversation(Base):
     String(50),
     nullable=True,
 )
+    # Number of successful chat answers since the last contact-info prompt.
+    request_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
     title: Mapped[str|None] = (
         mapped_column(
             String(50),
